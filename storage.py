@@ -7,6 +7,7 @@ class registers:
       self.PC = PC
       self.IR = IR
       self.CC = CC
+      self.PSR = 0x8000 + self.CC
 
   def __getitem__(self, position):
       return self.registers[position]
@@ -14,6 +15,7 @@ class registers:
   #Handles .ORIG line
   def set_origin(self, origin):
       self.PC = origin
+
 
   def print_registers(self):
       for i, register in enumerate(self.registers):

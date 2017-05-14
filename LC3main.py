@@ -233,6 +233,20 @@ def handle_ret(inst):
     inst_list = parser.parse_ret(inst)
     regs.PC = regs.registers[7]
 
+def handle_rti(inst):
+    inst_list = parser.parse_ret(inst)
+    if regs.PSR >> 15 == 0:
+        regs.PC = memory[regs.registers[6]]
+        regs.registers[6] += 1
+        temp = memory[regs.registers[6]]
+        regs.registers[6] += 1
+        regs.PSR = temp
+        regs.CC = PSR & 0b111
+    else:
+        print "Priviledge mode exception."
+        ON = False
+
+
 def handle_trap(inst):
     global ON
     trap = parser.parse_trap(inst)[1]
