@@ -87,14 +87,10 @@ def handle_instruction(inst):
         handle_jsr(inst)
     elif str_op == 'RET':
         handle_ret(inst)
-    elif str_op == 'TRAP':
-        handle_trap(inst)
-
-    '''
     elif str_op == 'RTI':
         handle_rti(inst)
-     '''
-
+    elif str_op == 'TRAP':
+        handle_trap(inst)
 
 #Detect that a key has been pressed:
 def kbfunc(): 
