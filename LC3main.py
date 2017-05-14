@@ -31,6 +31,7 @@ def main():
   memory.load_instructions('instructs/test3.txt', regs)
   memory[MCR] = 0xFFFF
   run_instructions()
+  print ''
   regs.print_registers()
   print ''
   regs.print_spec_regs()
@@ -103,7 +104,7 @@ def poll_status_registers():
 
 def handle_DDR():
     if (DSR >> 15) & 0b1 == 1:
-        print memory[DDR]
+        sys.stdout.write(chr(memory[sign_extend(DDR, 16)]))
 
 #
 # HANDLERS: THe following functions handle
@@ -158,6 +159,7 @@ def handle_ld(inst):
     regs.registers[DR] = value
     regs.set_CC(value)
     if address == DDR:
+        print "here"
         handle_DDR()
 
 def handle_ldi(inst):
@@ -167,8 +169,7 @@ def handle_ldi(inst):
     value = memory[memory[address]]
     regs.registers[DR] = value
     regs.set_CC(value)
-    if memory[address] == DDR:
-        handle_DDR()
+
 
 def handle_ldr(inst):
     inst_list = parser.parse_ldr(inst)
@@ -178,8 +179,6 @@ def handle_ldr(inst):
     value = memory[address]
     regs.registers[DR] = value
     regs.set_CC(value)
-    if address == DDR:
-        handle_DDR()
 
 def handle_lea(inst):
     inst_list = parser.parse_lea(inst)
@@ -193,12 +192,17 @@ def handle_st(inst):
     val = regs.registers[SR]
     address = regs.PC + sign_extend(inst_list[2], 9)
     memory[address] = val
+    if val == sign_extend(DDR, 16):
+        print "here"
+        handle_DDR()
 
 def handle_sti(inst):
     inst_list = parser.parse_st(inst)
     SR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 9)
-    memory[address] = SR
+    memory[memory[address]] = regs.registers[SR]
+    if memory[address] == sign_extend(DDR, 16):
+        handle_DDR()
 
 def handle_str(inst):
     inst_list = parser.parse_str(inst)
@@ -206,6 +210,9 @@ def handle_str(inst):
     BaseR = inst_list[2]
     address = regs.registers[BaseR] + sign_extend(inst_list[3], 6)
     memory[address] = regs.registers[SR]
+    if regs.registers[SR] == sign_extend(DDR, 16):
+        print "here"
+        handle_DDR()
 
 def handle_br(inst):
     inst_list = parser.parse_br(inst)
