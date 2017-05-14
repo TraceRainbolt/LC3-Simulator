@@ -48,9 +48,7 @@ def run_instructions():
         regs.IR = inst
         #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[0])
         handle_instruction(inst)
-        if (memory[KBSR] >> 15) & 1 == 1:
-            memory[KBSR] = memory[KBSR] & 0x4000
-        poll_status_registers()
+        #poll_status_registers()
         #print to_hex_string(regs.PC)
 
 #Finds instruction and tells handle to execute it
@@ -91,6 +89,7 @@ def handle_instruction(inst):
     elif str_op == 'TRAP':
         handle_trap(inst)
 
+
 #Detect that a key has been pressed:
 def kbfunc(): 
    x = msvcrt.kbhit()
@@ -111,12 +110,19 @@ def poll_status_registers():
         return True
     return False
 
+def update_keyboard():
+    while ON:
+        poll_status_registers()
 
 def handle_DDR():
     if (memory[DSR] >> 15) & 0b1 == 1:
         if memory[DDR] in range(256):
             sys.stdout.write(chr(memory[DDR]))
 
+def handle_KBSR():
+    if (memory[KBSR] >> 15) & 1 == 1:
+        memory[KBSR] = memory[KBSR] & 0x4000
+    poll_status_registers()
 #
 # HANDLERS: THe following functions handle
 # their respective instructions
@@ -168,6 +174,8 @@ def handle_ld(inst):
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 16)
     value = memory[address]
+    if address == KBSR:
+        handle_KBSR()
     regs.registers[DR] = value
     regs.set_CC(value)
 
@@ -176,9 +184,10 @@ def handle_ldi(inst):
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 9)
     value = memory[memory[address]]
+    if memory[address] == KBSR:
+        handle_KBSR()
     regs.registers[DR] = value
     regs.set_CC(value)
-
 
 def handle_ldr(inst):
     inst_list = parser.parse_ldr(inst)
@@ -186,6 +195,8 @@ def handle_ldr(inst):
     BaseR = inst_list[2]
     address = regs.registers[BaseR] + sign_extend(inst_list[3], 6)
     value = memory[address]
+    if address == KBSR:
+        handle_KBSR()
     regs.registers[DR] = value
     regs.set_CC(value)
 
@@ -286,7 +297,13 @@ def to_hex_string(val):
     return 'x' + '{:04x}'.format((val + (1 << 16)) % (1 << 16)).upper()
  
 if __name__ == '__main__':
-    thread = Thread(target = main())
-    thread.start()
-    thread.join()
+    main()
+    #thread_main = Thread(target = main)
+    # thread_keyb = Thread(target = update_keyboard)
+    '''thread_main.daemon = True
+    thread_keyb.daemon = True
+    thread_main.start()
+    thread_keyb.start()
+    thread_main.join()
+    thread_keyb.join()'''
  
