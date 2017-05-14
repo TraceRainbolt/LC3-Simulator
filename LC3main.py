@@ -25,7 +25,6 @@ MCR = 0xFFFE
 #Location of OS file
 os_file_name = "operating_sys_lc3.txt"
 
-
 #Main function, intializes memory and starts running isntructions
 def main():
   memory.memory = memory.load_os(os_file_name, 65537)
@@ -35,46 +34,40 @@ def main():
   regs.print_registers()
   print ''
   regs.print_spec_regs()
-  print bin(memory[KBSR])
+  #print bin(memory[KBSR])
 
 #Handles basics for running instructions
 def run_instructions():
-    while ON: 
+    while ON:
         regs.PC += 1
         inst = memory[regs.PC - 1]
         regs.IR = inst
+        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + str(regs.registers[0]) + " " + to_hex_string(regs.registers[1])
         handle_instruction(inst)
-        check_status_registers()
+        poll_status_registers()
+        #print to_hex_string(regs.PC)
 
 #Finds instruction and tells handle to execute it
 def handle_instruction(inst):
-    pieces = []
     opcode = inst >> 12
-    pieces.append(opcode)
     inst_list = []
     str_op = parse_op(opcode)
     reg_state = copy.deepcopy(regs.registers)
+    temp = None
     if str_op == 'ADD':
         handle_add(inst)
-        regs.CC = handle_CC(reg_state, regs.CC)
     elif str_op == 'NOT':
         handle_not(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'AND':
         handle_and(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LD':
         handle_ld(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LDI':
         handle_ldi(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LDR':
         handle_ldr(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LEA':
         handle_lea(inst)
-        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'ST':
         handle_st(inst)
     elif str_op == 'STI':
@@ -98,29 +91,19 @@ def kbfunc():
    if x: 
       ret = ord(msvcrt.getch()) 
    else: 
-      ret = 0 
+      ret = None 
    return ret
 
 #See if status registers have been updated
-def check_status_registers():
-    if kbfunc() != 0:
+def poll_status_registers():
+    char = kbfunc()
+    if  char:
         memory[KBSR] = memory[KBSR] ^ 0x4000
-    if (memory[KBSR] >> 15) & 0b1 == 1:
-        print ord(regs.registers[0])
-        memory[KBSR] = memory[KBSR] ^ 0x4000
+        memory[KBDR] = char
 
-
-#Update CC as necessary
-def handle_CC(reg_state, CC):
-  for i, reg in enumerate(regs):
-      if reg != reg_state[i]:
-          if reg < 0:
-              return 0b100
-          if reg == 0:
-              return 0b010
-          else:
-              return 0b001
-  return CC
+def handle_DDR():
+    if (DSR >> 15) & 0b1 == 1:
+        print memory[DDR]
 
 #
 # HANDLERS: THe following functions handle
@@ -138,13 +121,18 @@ def handle_add(inst):
     SR1 = regs[inst_list[2]]
     #Let fsm execute add
     inst_list_eval = [SR1, V2]
-    regs.registers[DR] = ctu.execute_add(inst_list_eval)
+    value = ctu.execute_add(inst_list_eval)
+    regs.registers[DR] = value
+    regs.set_CC(value)
+
 
 def handle_not(inst):
     inst_list = parser.parse_not(inst)
     DR = inst_list[1]
     SR = regs[inst_list[2]]
-    regs.registers[DR]  = ctu.execute_not(SR)
+    value = ctu.execute_not(SR)
+    regs.registers[DR] = value
+    regs.set_CC(value)
 
 def handle_and(inst):
     inst_list = parser.parse_add(inst)
@@ -158,26 +146,40 @@ def handle_and(inst):
     SR1 = regs[inst_list[2]]
     #Let fsm execute add
     inst_list_eval = [SR1, V2]
-    regs.registers[DR]  = ctu.execute_and(inst_list_eval)
+    value = ctu.execute_and(inst_list_eval)
+    regs.registers[DR]  = value
+    regs.set_CC(value)
 
 def handle_ld(inst):
     inst_list = parser.parse_ld(inst)
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 16)
-    regs.registers[DR] = memory[address]
+    value = memory[address]
+    regs.registers[DR] = value
+    regs.set_CC(value)
+    if address == DDR:
+        handle_DDR()
 
 def handle_ldi(inst):
     inst_list = parser.parse_ldi(inst)
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 9)
-    regs.registers[DR] = memory[memory[address]]
+    value = memory[memory[address]]
+    regs.registers[DR] = value
+    regs.set_CC(value)
+    if memory[address] == DDR:
+        handle_DDR()
 
 def handle_ldr(inst):
     inst_list = parser.parse_ldr(inst)
     DR = inst_list[1]
     BaseR = inst_list[2]
     address = regs.registers[BaseR] + sign_extend(inst_list[3], 6)
-    regs.registers[DR] = memory[address]
+    value = memory[address]
+    regs.registers[DR] = value
+    regs.set_CC(value)
+    if address == DDR:
+        handle_DDR()
 
 def handle_lea(inst):
     inst_list = parser.parse_lea(inst)
@@ -211,7 +213,7 @@ def handle_br(inst):
     cc = '{:03b}'.format(regs.CC)
     address = regs.PC + sign_extend(inst_list[2], 9)
     for i, bit in enumerate(condition):
-        if bit == cc[i]:
+        if bit == "1" and bit == cc[i]:
             regs.PC = address
 
 def handle_jsr(inst):
@@ -247,7 +249,9 @@ def handle_trap(inst):
     global ON
     trap = parser.parse_trap(inst)[1]
     regs.PC = memory[trap]
-    if trap == 0x0025:
+    if trap == 0:
+        ON = False
+    if trap == 0x25:
         ON = False
 
 
