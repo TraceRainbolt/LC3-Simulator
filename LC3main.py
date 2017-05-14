@@ -1,6 +1,8 @@
 import sys
 import os
 import copy
+from threading import Thread
+from time import sleep
 import errno
 import msvcrt
 import numpy as np
@@ -16,11 +18,11 @@ memory = memory()
 ON = True
 
 #Useful memory locations
-KBSR = 0xFE00
-KBDR = 0xFE02
-DSR = 0xFE04
-DDR = 0xFE06
-MCR = 0xFFFE
+KBSR = -512 #xFE00
+KBDR = -510 #xFE02
+DSR = -508  #xFE04
+DDR = -506  #xFE06
+MCR = -504  #xFFFE
 
 #Location of OS file
 os_file_name = "operating_sys_lc3.txt"
@@ -39,12 +41,15 @@ def main():
 
 #Handles basics for running instructions
 def run_instructions():
-    while ON:
+    cycle = 0
+    while (memory[MCR] >> 15) & 0b1 == 1:
         regs.PC += 1
         inst = memory[regs.PC - 1]
         regs.IR = inst
-        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + str(regs.registers[0]) + " " + to_hex_string(regs.registers[1])
+        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[0])
         handle_instruction(inst)
+        if (memory[KBSR] >> 15) & 1 == 1:
+            memory[KBSR] = memory[KBSR] & 0x4000
         poll_status_registers()
         #print to_hex_string(regs.PC)
 
@@ -98,13 +103,19 @@ def kbfunc():
 #See if status registers have been updated
 def poll_status_registers():
     char = kbfunc()
-    if  char:
-        memory[KBSR] = memory[KBSR] ^ 0x4000
+    if char:
+        memory[KBSR] = memory[KBSR] + 0x8000
+        if char == 0x0D:
+            char = 0x0A
         memory[KBDR] = char
+        return True
+    return False
+
 
 def handle_DDR():
-    if (DSR >> 15) & 0b1 == 1:
-        sys.stdout.write(chr(memory[sign_extend(DDR, 16)]))
+    if (memory[DSR] >> 15) & 0b1 == 1:
+        if memory[DDR] in range(256):
+            sys.stdout.write(chr(memory[DDR]))
 
 #
 # HANDLERS: THe following functions handle
@@ -117,12 +128,13 @@ def handle_add(inst):
     if inst_list[3] == 0: 
         V2 = regs[inst_list[4]]
     else:
-        V2 = inst_list[4]
+        V2 = sign_extend(inst_list[4], 5)
     DR = inst_list[1]
     SR1 = regs[inst_list[2]]
     #Let fsm execute add
     inst_list_eval = [SR1, V2]
     value = ctu.execute_add(inst_list_eval)
+    n = regs.registers[3]
     regs.registers[DR] = value
     regs.set_CC(value)
 
@@ -142,7 +154,7 @@ def handle_and(inst):
     if inst_list[3] == 0: 
         V2 = regs[inst_list[4]]
     else:
-        V2 = inst_list[4]
+        V2 = sign_extend(inst_list[4], 5)
     DR = inst_list[1]
     SR1 = regs[inst_list[2]]
     #Let fsm execute add
@@ -158,9 +170,6 @@ def handle_ld(inst):
     value = memory[address]
     regs.registers[DR] = value
     regs.set_CC(value)
-    if address == DDR:
-        print "here"
-        handle_DDR()
 
 def handle_ldi(inst):
     inst_list = parser.parse_ldi(inst)
@@ -192,8 +201,7 @@ def handle_st(inst):
     val = regs.registers[SR]
     address = regs.PC + sign_extend(inst_list[2], 9)
     memory[address] = val
-    if val == sign_extend(DDR, 16):
-        print "here"
+    if val == DDR:
         handle_DDR()
 
 def handle_sti(inst):
@@ -201,7 +209,7 @@ def handle_sti(inst):
     SR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 9)
     memory[memory[address]] = regs.registers[SR]
-    if memory[address] == sign_extend(DDR, 16):
+    if memory[address] == DDR:
         handle_DDR()
 
 def handle_str(inst):
@@ -210,8 +218,7 @@ def handle_str(inst):
     BaseR = inst_list[2]
     address = regs.registers[BaseR] + sign_extend(inst_list[3], 6)
     memory[address] = regs.registers[SR]
-    if regs.registers[SR] == sign_extend(DDR, 16):
-        print "here"
+    if regs.registers[SR] == DDR:
         handle_DDR()
 
 def handle_br(inst):
@@ -254,10 +261,9 @@ def handle_rti(inst):
 
 def handle_trap(inst):
     global ON
+    regs.registers[7] = regs.PC
     trap = parser.parse_trap(inst)[1]
     regs.PC = memory[trap]
-    if trap == 0:
-        ON = False
     if trap == 0x25:
         ON = False
 
@@ -280,5 +286,7 @@ def to_hex_string(val):
     return 'x' + '{:04x}'.format((val + (1 << 16)) % (1 << 16)).upper()
  
 if __name__ == '__main__':
-    main()
+    thread = Thread(target = main())
+    thread.start()
+    thread.join()
  
