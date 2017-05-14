@@ -18,8 +18,8 @@ ON = True
 #Useful memory locations
 KBSR = 0xFE00
 KBDR = 0xFE02
-DSR = 0xFE02
-DDR = 0xFE02
+DSR = 0xFE04
+DDR = 0xFE06
 MCR = 0xFFFE
 
 #Location of OS file
@@ -41,12 +41,10 @@ def main():
 def run_instructions():
     while ON: 
         regs.PC += 1
-        reg_state = copy.deepcopy(regs.registers)
         inst = memory[regs.PC - 1]
         regs.IR = inst
         handle_instruction(inst)
         check_status_registers()
-        regs.CC = handle_CC(reg_state, regs.CC)
 
 #Finds instruction and tells handle to execute it
 def handle_instruction(inst):
@@ -55,20 +53,28 @@ def handle_instruction(inst):
     pieces.append(opcode)
     inst_list = []
     str_op = parse_op(opcode)
+    reg_state = copy.deepcopy(regs.registers)
     if str_op == 'ADD':
         handle_add(inst)
+        regs.CC = handle_CC(reg_state, regs.CC)
     elif str_op == 'NOT':
-        handle_not(inst) 
+        handle_not(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'AND':
         handle_and(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LD':
         handle_ld(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LDI':
         handle_ldi(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LDR':
         handle_ldr(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'LEA':
         handle_lea(inst)
+        regs.CC = handle_CC(reg_state, regs.CC) 
     elif str_op == 'ST':
         handle_st(inst)
     elif str_op == 'STI':
@@ -77,14 +83,14 @@ def handle_instruction(inst):
         handle_str(inst)
     elif str_op == 'BR':
         handle_br(inst)
-    elif str_op == 'TRAP':
-        handle_trap(inst)
-
-    '''
     elif str_op == 'JSR':
         handle_jsr(inst)
     elif str_op == 'RET':
         handle_ret(inst)
+    elif str_op == 'TRAP':
+        handle_trap(inst)
+
+    '''
     elif str_op == 'RTI':
         handle_rti(inst)
      '''
@@ -211,6 +217,21 @@ def handle_br(inst):
     for i, bit in enumerate(condition):
         if bit == cc[i]:
             regs.PC = address
+
+def handle_jsr(inst):
+    inst_list = parser.parse_jsr(inst)
+    address = 0x0000
+    if inst_list[1] == 1:
+        address = regs.PC + sign_extend(inst_list[2], 11)
+    else:
+        BaseR = inst_list[2]
+        address = regs.registers[BaseR]
+    regs.registers[7] = regs.PC
+    regs.PC = address
+
+def handle_ret(inst):
+    inst_list = parser.parse_ret(inst)
+    regs.PC = regs.registers[7]
 
 def handle_trap(inst):
     global ON
