@@ -8,6 +8,7 @@ class registers:
       self.IR = IR
       self.CC = CC
       self.PSR = 0x8000 + self.CC
+      self.iPC = PC + 1
 
   def __getitem__(self, position):
       return self.registers[position]
@@ -16,6 +17,15 @@ class registers:
   def set_origin(self, origin):
       self.PC = origin
 
+  def set_CC(self, value):
+      if value < 0:
+          self.CC = 0b100
+      elif value == 0:
+          self.CC = 0b010
+      elif value > 0:
+          self.CC = 0b001
+      else:
+          print "Invalde CC state entered."
 
   def print_registers(self):
       for i, register in enumerate(self.registers):
