@@ -22,14 +22,14 @@ KBSR = -512 #xFE00
 KBDR = -510 #xFE02
 DSR = -508  #xFE04
 DDR = -506  #xFE06
-MCR = -504  #xFFFE
+MCR = -2  #xFFFE
 
 #Location of OS file
 os_file_name = "operating_sys_lc3.txt"
 
 #Main function, intializes memory and starts running isntructions
 def main():
-  memory.memory = memory.load_os(os_file_name, 65537)
+  memory.memory = memory.load_os(os_file_name, 65536)
   memory.load_instructions('instructs/test3.txt', regs)
   memory[MCR] = 0xFFFF
   run_instructions()
@@ -46,8 +46,12 @@ def run_instructions():
         regs.PC += 1
         inst = memory[regs.PC - 1]
         regs.IR = inst
-        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[0])
+        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[1])
         handle_instruction(inst)
+        if ON == False:
+            if regs.PC == sign_extend(0xFD79, 16):
+                memory[MCR] = 0x7FFF
+
         #poll_status_registers()
         #print to_hex_string(regs.PC)
 
@@ -110,18 +114,21 @@ def poll_status_registers():
         return True
     return False
 
+#For future use (when threads are added)
 def update_keyboard():
     while ON:
         poll_status_registers()
 
+#Handle the Dispaly Data Register, called when updated
 def handle_DDR():
     if (memory[DSR] >> 15) & 0b1 == 1:
         if memory[DDR] in range(256):
             sys.stdout.write(chr(memory[DDR]))
 
+#Handle the Keyboard Status Register, called when updated
 def handle_KBSR():
     if (memory[KBSR] >> 15) & 1 == 1:
-        memory[KBSR] = memory[KBSR] & 0x4000
+        memory[KBSR] = memory[KBSR] & 0x4000  #Reset KBSR
     poll_status_registers()
 #
 # HANDLERS: THe following functions handle
@@ -174,20 +181,20 @@ def handle_ld(inst):
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 16)
     value = memory[address]
+    regs.set_CC(value)
     if address == KBSR:
         handle_KBSR()
     regs.registers[DR] = value
-    regs.set_CC(value)
 
 def handle_ldi(inst):
     inst_list = parser.parse_ldi(inst)
     DR = inst_list[1]
     address = regs.PC + sign_extend(inst_list[2], 9)
     value = memory[memory[address]]
+    regs.set_CC(value)
     if memory[address] == KBSR:
         handle_KBSR()
     regs.registers[DR] = value
-    regs.set_CC(value)
 
 def handle_ldr(inst):
     inst_list = parser.parse_ldr(inst)
@@ -267,7 +274,7 @@ def handle_rti(inst):
         regs.CC = PSR & 0b111
     else:
         print "Priviledge mode exception."
-        ON = False
+        ON = False1
 
 
 def handle_trap(inst):

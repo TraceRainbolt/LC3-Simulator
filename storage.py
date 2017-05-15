@@ -53,7 +53,7 @@ class memory:
         with open(fname) as f:
             orig = int("".join(f.readline()), 2)
             for i, line in enumerate(f):
-                self.memory[i + orig] = int(line, 2)
+                self.memory[sign_extend(orig, 16) + i] = int(line, 2)
                 i += 1
         regs.set_origin(orig)
 
@@ -68,3 +68,9 @@ class memory:
 #Used for properly formatting/printing hex numbers
 def to_hex_string(val):
     return 'x' + '{:04x}'.format((val + (1 << 16)) % (1 << 16)).upper()
+
+#Sign extend, used for SEXTing offsets
+def sign_extend(val, bits):
+    if (val & (1 << (bits - 1))) != 0: # if sign bit is set
+        val = val - (1 << bits)        # compute negative value
+    return val                         # return positive value as is
