@@ -30,7 +30,9 @@ os_file_name = "operating_sys_lc3.txt"
 #Main function, intializes memory and starts running isntructions
 def main():
   memory.memory = memory.load_os(os_file_name, 65536)
-  memory.load_instructions('instructs/test3.txt', regs)
+  memory.load_instructions('instructs/data.txt', regs)
+  #memory.load_instructions('instructs/trap.txt', regs)
+  memory.load_instructions('instructs/quiz.txt', regs)
   memory[MCR] = 0xFFFF
   run_instructions()
   print ''
@@ -43,10 +45,12 @@ def main():
 def run_instructions():
     cycle = 0
     while (memory[MCR] >> 15) & 0b1 == 1:
+    #for i in range(720):
+    #while True:
         regs.PC += 1
         inst = memory[regs.PC - 1]
         regs.IR = inst
-        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[1])
+        #print to_hex_string(regs.PC - 1) + " " + to_hex_string(regs.IR) + " " + to_hex_string(regs.CC) + " " + to_hex_string(regs.registers[0])
         handle_instruction(inst)
         if ON == False:
             if regs.PC == sign_extend(0xFD79, 16):
@@ -251,9 +255,9 @@ def handle_br(inst):
 def handle_jsr(inst):
     inst_list = parser.parse_jsr(inst)
     address = 0x0000
-    if inst_list[1] == 1:
+    if inst_list[1] == 1: #JSR
         address = regs.PC + sign_extend(inst_list[2], 11)
-    else:
+    else: #JSRR 
         BaseR = inst_list[2]
         address = regs.registers[BaseR]
     regs.registers[7] = regs.PC
