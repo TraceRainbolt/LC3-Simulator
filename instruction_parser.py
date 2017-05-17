@@ -1,3 +1,8 @@
+#
+# This file takes an instruction and returns
+# a list of the separated parts
+#
+
 def parse_add(inst):
    DR = get_DR(inst)
    SR1 = get_SR(inst)
@@ -68,6 +73,7 @@ def parse_br(inst):
 def parse_jump(inst):
    return ['JMP', get_SR(inst)]
 
+
 def parse_jsr(inst):
    if get_bit_11(inst) == 1:
       return['JSR', 1, get_11offset(inst)]
@@ -83,6 +89,10 @@ def parse_rti(inst):
 def parse_trap(inst):
    trap_vec = get_trap_vec(inst)
    return ['TRAP', trap_vec]
+
+#
+# Helper functions for parsing instructions
+#
 
 def get_DR(inst):
    return (inst >> 9) & (0b111)
@@ -109,7 +119,7 @@ def get_11offset(inst):
    return inst & 0b11111111111
 
 def get_bit_11(inst):
-   return (inst >> 10) & 1
+   return (inst >> 11) & 1
 
 def is_imm(inst):
    return (inst >> 5) & (0b1) == 1
