@@ -26,8 +26,8 @@ os_file_name = "operating_sys_lc3.txt"
 # Main function, initializes memory and starts running instructions
 def main():
     memory.memory = memory.load_os(os_file_name, 65536)
-    memory.load_instructions('instructions/data.txt', regs)
-    memory.load_instructions('instructions/quiz.txt', regs)
+    memory.load_instructions('instructions/Quiz/data.obj', regs)
+    memory.load_instructions('instructions/Quiz/quiz.obj', regs)
     memory[MCR] = 0xFFFF
     run_instructions()
     print ''

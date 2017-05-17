@@ -1,4 +1,5 @@
 import numpy as np
+import binascii as ba
 
 # Register class for registers, PC, IR, and CC
 class registers:
@@ -50,11 +51,11 @@ class memory:
         self.memory[position] = item
 
     def load_instructions(self, fname, regs):
-        with open(fname) as f:
-            orig = int("".join(f.readline()), 2)
-            for i, line in enumerate(f):
-                self.memory[sign_extend(orig, 16) + i] = int(line, 2)
-                i += 1
+        inst_list = parse_obj(fname)
+        orig = int(inst_list.pop(0), 2)
+        for i, inst in enumerate(inst_list):
+            self.memory[sign_extend(orig, 16) + i] = int(inst, 2)
+            i += 1
         regs.set_origin(orig)
 
     # Loads LC3 Operating System from text file
@@ -64,6 +65,23 @@ class memory:
             for irow, line in enumerate(f):
                 x[irow] = int(line, 2)
         return x
+
+
+def parse_obj(fname):
+    chars = []
+    with open(fname) as f:
+        for line in f:
+            for char in line:
+                chars.append('{:08b}'.format(int(ba.hexlify(char), 16)))
+    combined_chars = []
+    j = 0
+    for i in range(len(chars)):
+        if j + 1 < len(chars):
+            char1 = chars[j]
+            char2 = chars[j + 1]
+            combined_chars.append(char1 + char2)
+        j += 2
+    return combined_chars
 
 
 # Used for properly formatting/printing hex numbers
