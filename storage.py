@@ -75,11 +75,10 @@ def parse_obj(fname):
                 chars.append('{:08b}'.format(int(ba.hexlify(char), 16)))
     combined_chars = []
     j = 0
-    for i in range(len(chars)):
-        if j + 1 < len(chars):
-            char1 = chars[j]
-            char2 = chars[j + 1]
-            combined_chars.append(char1 + char2)
+    while j + 1 < len(chars):
+        char1 = chars[j]
+        char2 = chars[j + 1]
+        combined_chars.append(char1 + char2)
         j += 2
     return combined_chars
 
