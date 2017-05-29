@@ -2,7 +2,7 @@ import numpy as np
 import binascii as ba
 
 # Register class for registers, PC, IR, and CC
-class registers:
+class Registers(object):
     def __init__(self, registers, PC, IR, CC):
         self.registers = registers
         self.PC = PC
@@ -40,7 +40,7 @@ class registers:
 
 
 # Memory class: xFFFF memory locations, containing a singed 16 bit number
-class memory:
+class Memory(object):
     def __init__(self, memory=None):
         self.memory = memory
 
@@ -60,13 +60,13 @@ class memory:
 
     # Loads LC3 Operating System from text file
     def load_os(self, fname, nrow):
-        x = np.empty(nrow, dtype='int16')
+        self.memory = np.empty(nrow, dtype='int16')
         with open(fname) as f:
             for irow, line in enumerate(f):
-                x[irow] = int(line, 2)
-        return x
+                self[irow] = int(line, 2)
 
 
+# Parse .obj files
 def parse_obj(fname):
     chars = []
     with open(fname) as f:
@@ -82,6 +82,8 @@ def parse_obj(fname):
         j += 2
     return combined_chars
 
+memory = Memory()
+registers = Registers(np.array([0, 0, 0, 0, 0, 0, 0, 0], dtype='int16'), 0, 0, 0)
 
 # Used for properly formatting/printing hex numbers
 def to_hex_string(val):

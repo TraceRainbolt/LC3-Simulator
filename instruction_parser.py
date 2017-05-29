@@ -3,6 +3,45 @@
 # a list of the separated parts
 #
 
+def parse_any(inst):
+    opcode = inst >> 12
+
+    str_op = parse_op(opcode)
+
+    if str_op == 'ADD':
+        return parse_add(inst)
+    elif str_op == 'NOT':
+        return parse_not(inst)
+    elif str_op == 'AND':
+        return parse_and(inst)
+    elif str_op == 'LD':
+        return parse_ld(inst)
+    elif str_op == 'LDI':
+        return parse_ldi(inst)
+    elif str_op == 'LDR':
+        return parse_ldr(inst)
+    elif str_op == 'LEA':
+        return parse_lea(inst)
+    elif str_op == 'ST':
+        return parse_st(inst)
+    elif str_op == 'STI':
+        return parse_sti(inst)
+    elif str_op == 'STR':
+        return parse_str(inst)
+    elif str_op == 'BR':
+        ret = parse_br(inst)
+        if ret[1] == 0 and ret[2] == 0:
+            return 'NOP'
+        return ret
+    elif str_op == 'JSR':
+        return parse_jsr(inst)
+    elif str_op == 'RET':
+        return parse_ret(inst)
+    elif str_op == 'RTI':
+        return parse_rti(inst)
+    elif str_op == 'TRAP':
+        return parse_trap(inst)
+
 def parse_add(inst):
     DR = get_DR(inst)
     SR1 = get_SR(inst)
@@ -104,7 +143,6 @@ def parse_trap(inst):
     trap_vec = get_trap_vec(inst)
     return ['TRAP', trap_vec]
 
-
 #
 # Helper functions for parsing instructions
 #
@@ -147,3 +185,10 @@ def get_bit_11(inst):
 
 def is_imm(inst):
     return (inst >> 5) & 0b1 == 1
+
+
+def parse_op(opcode):
+    return ['BR', 'ADD', 'LD', 'ST',
+            'JSR', 'AND', 'LDR', 'STR',
+            'RTI', 'NOT', 'LDI', 'STI',
+            'RET', 'NOP', 'LEA', 'TRAP'][opcode]
