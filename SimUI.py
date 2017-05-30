@@ -17,17 +17,18 @@ class Window(QtGui.QMainWindow):
         super(Window, self).__init__()
         self.setGeometry(100, 100, 1000, 1000)
         self.setWindowTitle("LC3 Simulator")
+        self.registers = registers
         # self.setWindowIcon(QtGui.Icon('logo.png'))
         self.setupFileMenu()
         self.console = Console()
         self.console_thread = None
         self.worker = None
 
-        self.mem_table = MemoryTable(memory, 65536, 5)
+        self.mem_table = MemoryTable(memory, registers, 65536, 5)
         self.reg_table = RegisterTable(registers, 4, 3)
-        self.buttons = ButtonRow()
-        self.grid = QtGui.QGridLayout()
         self.search_bar = SearchBar(self.mem_table)
+        self.buttons = ButtonRow(self)
+        self.grid = QtGui.QGridLayout()
 
         self.home()
 
@@ -100,7 +101,7 @@ class Window(QtGui.QMainWindow):
 
     @QtCore.pyqtSlot(Registers)
     def updateRegTable(self, registers):
-        self.regTable.setData(registers)
+        self.reg_table.setData(registers)
 
     def load_program(self):
         self.file_diag = FileDialog()
@@ -119,7 +120,7 @@ class Window(QtGui.QMainWindow):
     def run(self):
         thread = QtCore.QThread()
         self.console_thread = thread
-        self.worker = RunHandler(self)
+        self.worker = RunHandler(self, self.registers)
 
         self.worker.moveToThread(thread)
         self.worker.finished.connect(thread.quit)
@@ -155,16 +156,21 @@ class RunHandler(QtCore.QObject):
     getkey = QtCore.pyqtSignal(int)
     started = QtCore.pyqtSignal()
 
-    def __init__(self, main):
+    def __init__(self, main, registers):
         super(QtCore.QObject, self).__init__()
         self.main = main
+        self.registers = registers
 
     def run_app(self):
+        row = int(to_hex_string(self.registers.PC)[1:], 16)
+        self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
         LC3main.run_instructions(self)
 
     @QtCore.pyqtSlot(Registers)
-    def sendRegTable(self, registers):
-        self.update_regs.emit(registers)
+    def sendRegTable(self):
+        self.update_regs.emit(self.registers)
+        row = int(to_hex_string(self.registers.PC)[1:], 16)
+        self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
 
     @QtCore.pyqtSlot(str)
     def sendAppend(self, char):
@@ -217,9 +223,9 @@ class RegisterTable(QTableWidget):
 
 
 class MemoryTable(QTableWidget):
-    def __init__(self, memory, *args):
+    def __init__(self, memory, registers, *args):
         QTableWidget.__init__(self, *args)
-        self.setData(memory)
+        self.setData(memory, registers)
         self.setColumnWidth(0, 40)
         self.setColumnWidth(1, 50)
         self.setColumnWidth(2, 163)
@@ -228,18 +234,22 @@ class MemoryTable(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setVisible(False)
 
-    def setData(self, memory):
+    def setData(self, memory, registers):
         for row in range(self.rowCount()):
+            inst = memory.memory[row]
+            inst_bin = to_bin_string(inst)
+            inst_hex = to_hex_string(inst)
+
             self.setItem(row, 0, QtGui.QTableWidgetItem())
             self.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+
+            if row == registers.PC:
+                self.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
 
             # self.item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
 
             self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
 
-            inst = memory.memory[row]
-            inst_bin = to_bin_string(inst)
-            inst_hex = to_hex_string(inst)
 
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
             self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
@@ -270,11 +280,12 @@ class SearchBar(QtGui.QLineEdit):
 
 
 class ButtonRow(QtGui.QWidget):
-    def __init__(self, *args):
+    def __init__(self, window, *args):
         QtGui.QWidget.__init__(self, *args)
         self.grid = QtGui.QGridLayout()
         self.run_button = QtGui.QPushButton('Run', self)
         self.run_button.setMinimumHeight(40)
+        self.run_button.clicked.connect(window.run)
 
         self.step_button = QtGui.QPushButton('Step', self)
         self.step_button.setMinimumHeight(40)
