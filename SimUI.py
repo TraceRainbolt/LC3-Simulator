@@ -101,7 +101,8 @@ class Window(QtGui.QMainWindow):
         self.regTable.setData(registers)
 
     def load_program(self):
-        pass
+        self.file_diag = FileDialog()
+        self.file_diag.file_open()
 
     def clear_console(self):
         self.console.clear()
@@ -244,6 +245,13 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
             self.setItem(row, 4, QTableWidgetItem(QString(str(parser.parse_any(inst)))))
 
+
+class FileDialog(QtGui.QFileDialog):
+    def file_open(self):
+        name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        f = open(name, 'r')
+
+        # TODO: read file
 
 class Thread(QtCore.QThread):
     """Need for PyQt4 <= 4.6 only"""
