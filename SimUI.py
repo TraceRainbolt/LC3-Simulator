@@ -1,12 +1,8 @@
 import sys
-from functools import partial
 
-import PySide
-import numpy as np
-import time
 from PyQt4 import QtGui, QtCore
-from PyQt4.QtCore import QString, Qt, QChar
-from PyQt4.QtGui import QTableWidgetItem, QTableWidget, QTextEdit, QApplication
+from PyQt4.QtCore import QString, SIGNAL
+from PyQt4.QtGui import QTableWidgetItem, QTableWidget, QTextEdit, QLineEdit
 
 from LC3main import to_hex_string
 from LC3main import to_bin_string
@@ -19,7 +15,7 @@ from storage import Registers
 class Window(QtGui.QMainWindow):
     def __init__(self, memory, registers):
         super(Window, self).__init__()
-        self.setGeometry(100, 100, 1000, 800)
+        self.setGeometry(100, 100, 1000, 1000)
         self.setWindowTitle("LC3 Simulator")
         # self.setWindowIcon(QtGui.Icon('logo.png'))
         self.setupFileMenu()
@@ -27,7 +23,13 @@ class Window(QtGui.QMainWindow):
         self.console_thread = None
         self.worker = None
 
-        self.home(memory, registers)
+        self.mem_table = MemoryTable(memory, 65536, 5)
+        self.reg_table = RegisterTable(registers, 4, 3)
+        self.buttons = ButtonRow()
+        self.grid = QtGui.QGridLayout()
+        self.search_bar = SearchBar(self.mem_table)
+
+        self.home()
 
     def __del__(self):
         # Restore sys.stdout
@@ -36,18 +38,18 @@ class Window(QtGui.QMainWindow):
     def run(self):
         RunHandler.run_app(self)
 
-    def home(self, memory, registers):
+    def home(self):
         centralWidget = QtGui.QWidget()
 
-        self.memTable = MemoryTable(memory, 65536, 5)
-        self.regTable = RegisterTable(registers, 4, 3)
-        self.grid = QtGui.QGridLayout()
-
-        self.grid.addWidget(self.regTable, 0, 0)
-        self.grid.addWidget(self.memTable, 1, 0)
-        self.grid.addWidget(self.console, 1, 1)
-        self.grid.setRowStretch(0, 1)
-        self.grid.setRowStretch(1, 5)
+        self.grid.addWidget(self.reg_table, 0, 0)
+        self.grid.addWidget(self.buttons, 1, 0)
+        self.grid.addWidget(self.search_bar, 2, 0)
+        self.grid.addWidget(self.mem_table, 3, 0)
+        self.grid.addWidget(self.console, 3, 1)
+        self.grid.setRowStretch(0, 3)
+        self.grid.setRowStretch(1, 1)
+        self.grid.setRowStretch(2, 1)
+        self.grid.setRowStretch(3, 17)
 
         centralWidget.setLayout(self.grid)
         self.setCentralWidget(centralWidget)
@@ -146,7 +148,6 @@ class Console(QTextEdit):
             self.current_key = key
         QTextEdit.keyPressEvent(self, event)
 
-
 class RunHandler(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     updated = QtCore.pyqtSignal(str)
@@ -241,9 +242,10 @@ class MemoryTable(QTableWidget):
             inst_hex = to_hex_string(inst)
 
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
-
             self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
-            self.setItem(row, 4, QTableWidgetItem(QString(str(parser.parse_any(inst)))))
+
+            inst_list = parser.parse_any(inst)
+            self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
 
 class FileDialog(QtGui.QFileDialog):
@@ -252,6 +254,47 @@ class FileDialog(QtGui.QFileDialog):
         f = open(name, 'r')
 
         # TODO: read file
+
+class SearchBar(QtGui.QLineEdit):
+    def __init__(self, mem_table, *args):
+        QtGui.QLineEdit.__init__(self, *args)
+        self.mem_table = mem_table
+        self.connect(self, SIGNAL("returnPressed()"), self.goto_line)
+
+    def goto_line(self):
+        line = str(self.text())
+        if line[0] == 'x':
+            line = line[1:]
+        self.mem_table.verticalScrollBar().setValue(int(line, 16))
+        self.clear()
+
+
+class ButtonRow(QtGui.QWidget):
+    def __init__(self, *args):
+        QtGui.QWidget.__init__(self, *args)
+        self.grid = QtGui.QGridLayout()
+        self.run_button = QtGui.QPushButton('Run', self)
+        self.run_button.setMinimumHeight(40)
+
+        self.step_button = QtGui.QPushButton('Step', self)
+        self.step_button.setMinimumHeight(40)
+
+        self.stop_button = QtGui.QPushButton('Stop', self)
+        self.stop_button.setMinimumHeight(40)
+
+        self.pc_button = QtGui.QPushButton('Set PC', self)
+        self.pc_button.setMinimumHeight(40)
+
+        self.list_buttons()
+
+    def list_buttons(self):
+        self.grid.addWidget(self.run_button, 0, 0)
+        self.grid.addWidget(self.step_button, 0, 1)
+        self.grid.addWidget(self.stop_button, 0, 2)
+        self.grid.addWidget(self.pc_button, 0, 3)
+        self.setLayout(self.grid)
+
+
 
 class Thread(QtCore.QThread):
     """Need for PyQt4 <= 4.6 only"""
