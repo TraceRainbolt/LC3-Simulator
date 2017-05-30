@@ -1,4 +1,3 @@
-import msvcrt
 import sys
 
 import time
@@ -51,6 +50,7 @@ def create_UI():
 def update_gui_registers(console):
     QtCore.QMetaObject.invokeMethod(console, 'sendRegTable', Qt.DirectConnection, QtCore.Q_ARG(Registers, registers))
 
+
 # Handles basics for running instructions
 def run_instructions(console):
     while (memory[MCR] >> 15) & 0b1 == 1:
@@ -98,16 +98,6 @@ def handle_instruction(inst, console):
     elif str_op == 'TRAP':
         handle_trap(inst)
 
-
-# Detect that a key has been pressed:
-def kb_func():
-    x = msvcrt.kbhit()
-    if x:
-        ret = ord(msvcrt.getch())
-    else:
-        ret = None
-    return ret
-
 def kbhit(hit):
     char = hit
     time.sleep(0.0001)
@@ -122,7 +112,6 @@ def kbhit(hit):
 # See if status registers have been updated
 def poll_status_registers(console):
     QtCore.QMetaObject.invokeMethod(console, 'sendKey', Qt.DirectConnection)
-
 
 # For future use (when threads are added)
 def update_keyboard():
