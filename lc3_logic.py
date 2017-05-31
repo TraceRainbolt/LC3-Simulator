@@ -7,11 +7,10 @@ from PyQt4.QtCore import Qt
 import alu
 import instruction_parser as parser
 from storage import *
-import SimUI
+import lc3_gui
 
 # Turn ON machine
 ON = True
-
 
 # Useful memory locations
 KBSR = -512  # 0xFE00
@@ -20,36 +19,25 @@ DSR = -508  # 0xFE04
 DDR = -506  # 0xFE06
 MCR = -2  # 0xFFFE
 
-current_key = 0
-
 # Location of OS file
 os_file_name = "LC3_OS.bin"
-
 
 # Main function, initializes memory and starts running instructions
 def main():
     memory.load_os(os_file_name, 65536)
-    # memory.load_instructions('instructions/charCount/charCount.obj')
-    # memory.load_instructions('instructions/charCount/main.obj')
     memory[MCR] = 0xFFFF
     create_UI()
-    run_instructions()
-    print ''
-    registers.print_registers()
-    print ''
-    registers.print_spec_registers()
-
 
 def create_UI():
     app = QtGui.QApplication(sys.argv)
     app.setStyle("plastique")
-    GUI = SimUI.Window()
+    GUI = lc3_gui.Window()
     GUI.show()
     sys.exit(app.exec_())
 
+# Updates the register table to display to the UI
 def update_gui_registers(console):
-    QtCore.QMetaObject.invokeMethod(console, 'sendRegTable', Qt.DirectConnection, QtCore.Q_ARG(Registers, registers))
-
+    QtCore.QMetaObject.invokeMethod(console, 'sendRegTable', Qt.DirectConnection)
 
 # Handles basics for running instructions
 def run_instructions(console):
@@ -68,6 +56,7 @@ def run_instructions(console):
     QtCore.QMetaObject.invokeMethod(console, 'emit_done', Qt.DirectConnection)
 
 
+# Same as run instruction, but once
 def step_instruction(console):
     if (memory[MCR] >> 15) & 0b1 == 1:
         registers.PC += 1
@@ -318,11 +307,3 @@ def to_bin_string(val):
 
 if __name__ == '__main__':
     main()
-    # thread_main = Thread(target = main)
-    # thread_keyb = Thread(target = update_keyboard)
-    '''thread_main.daemon = True
-    thread_keyb.daemon = True
-    thread_main.start()
-    thread_keyb.start()
-    thread_main.join()
-    thread_keyb.join()'''

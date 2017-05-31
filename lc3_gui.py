@@ -16,6 +16,7 @@ from storage import *
 class Window(QtGui.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
+        self.file_diag = FileDialog()
         self.setGeometry(100, 100, 1000, 1000)
         self.setWindowTitle("LC3 Simulator")
         # self.setWindowIcon(QtGui.Icon('logo.png'))
@@ -37,6 +38,7 @@ class Window(QtGui.QMainWindow):
         sys.stdout = sys.__stdout__
 
     def home(self):
+        # Setup the general layout of the UI
         centralWidget = QtGui.QWidget()
 
         self.grid.addWidget(self.reg_table, 0, 0)
@@ -55,6 +57,7 @@ class Window(QtGui.QMainWindow):
         self.show()
 
     def setupFileMenu(self):
+        # Create the actions for the menu bar drop down
         loadProgramAction = QtGui.QAction("&Load Program", self)
         loadProgramAction.setShortcut("Ctrl+O")
         loadProgramAction.setStatusTip('Load a .obj file into the simulator')
@@ -80,8 +83,10 @@ class Window(QtGui.QMainWindow):
         runAction.setStatusTip('Run the simulation from the current PC')
         runAction.triggered.connect(lambda: self.run(False))
 
+        # Show the status bar tips
         self.statusBar()
 
+        # File menu setup
         mainMenu = self.menuBar()
         fileMenu = mainMenu.addMenu('&File')
         fileMenu.addAction(loadProgramAction)
@@ -89,6 +94,7 @@ class Window(QtGui.QMainWindow):
         fileMenu.addAction(clearConsoleAction)
         fileMenu.addAction(exitAction)
 
+        # Execute menu setup
         executeMenu = mainMenu.addMenu('&Execute')
         executeMenu.addAction(runAction)
 
@@ -102,30 +108,38 @@ class Window(QtGui.QMainWindow):
         self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()
 
-    @QtCore.pyqtSlot(Registers)
+    # Slot for receiving table updates
+    @QtCore.pyqtSlot()
     def updateSimTables(self):
         self.reg_table.setData()
 
+    # Open the file dialog to select program to load
     def load_program(self):
-        self.file_diag = FileDialog()
         self.file_diag.file_open(self)
 
+    # Clear the console
     def clear_console(self):
         self.console.clear()
 
+    # Reinitialize machine
+    # TODO: make this faster (probably by running in its own thread)
     def reinitialize_machine(self):
         memory.load_os(lc3_logic.os_file_name, 65536)
         self.mem_table.setData()
 
+    # Exit the entire application safely
     @staticmethod
     def exit_app():
         sys.exit(0)
 
+    # Used for stopping in the middle of an execution, activated by the STOP button
     @staticmethod
     def suspend_process():
         self.mem_table.verticalScrollBar().setValue(registers.PC)
         memory.paused = True
 
+    # Set the current PC pointer (blue box) to the correct instruction
+    # TODO: remove magic numbers and make methods for moving the PC pointer
     def set_pc(self):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
@@ -138,9 +152,12 @@ class Window(QtGui.QMainWindow):
         self.reg_table.setData()
         self.mem_table.setFocus()
 
+    # Called when ready to append to console
     def on_data_ready(self, data):
         self.appendText(data)
 
+    # This initializes a worker (RunHandler) to take care of moving signals into slots
+    # Also starts up thread and makes all proper connections
     def run(self, step):
         self.thread = QtCore.QThread()
         self.console_thread = self.thread
@@ -159,6 +176,8 @@ class Window(QtGui.QMainWindow):
         self.thread.finished.connect(self.thread.quit)
         self.thread.start()
 
+
+# Class for the console that the machine prints to
 class Console(QTextEdit):
     def __init__(self):
         super(QTextEdit, self).__init__()
@@ -168,6 +187,8 @@ class Console(QTextEdit):
         font.setPointSize(10)
         self.setFont(font)
 
+    # Override default keyPressEvent, update machine with correct information
+    # TODO: enable keyboard interrupts, should be easy now that this is its own thread
     def keyPressEvent(self, event):
         if isinstance(event, QtGui.QKeyEvent):
             key = ord(str(event.text()))
@@ -179,49 +200,56 @@ class Console(QTextEdit):
             memory[KBDR] = key
         QTextEdit.keyPressEvent(self, event)
 
+
+# Class for RunHandler, which handles all connections from GUI to logic
+# TODO: Refactor the variables so that their names make sense
 class RunHandler(QtCore.QObject):
-
+    #
     # Below are all signals associated with this worker
-
-    finished = QtCore.pyqtSignal()
-    updated = QtCore.pyqtSignal(str)
-    update_regs = QtCore.pyqtSignal(Registers)
-    get_key = QtCore.pyqtSignal(int)
-    started = QtCore.pyqtSignal()
-    force_stop = QtCore.pyqtSignal()
+    #
+    finished = QtCore.pyqtSignal()     # Used when done
+    updated = QtCore.pyqtSignal(str)   # Used when console is updated
+    update_regs = QtCore.pyqtSignal()  # Used when registers/memory is updated
+    started = QtCore.pyqtSignal()      # Used when started
 
     def __init__(self, main,):
         super(QtCore.QObject, self).__init__()
         self.main = main
         self.is_running = False
 
+    # Start running the the code
     def run_app(self):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
         lc3_logic.run_instructions(self)
         self.emit_done()
 
+    # Step through the code
     def step_app(self):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
         lc3_logic.step_instruction(self)
         self.emit_done()
 
+    # Slot for ending the current instruction run and closing the thread
     @QtCore.pyqtSlot()
     def emit_done(self):
         self.finished.emit()
 
-    @QtCore.pyqtSlot(Registers)
+    # Slot for updating the Register/Memory tables
+    @QtCore.pyqtSlot()
     def sendRegTable(self):
-        self.update_regs.emit(registers)
+        self.update_regs.emit()
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
 
+    # Slot for sending output to console
     @QtCore.pyqtSlot(str)
     def sendAppend(self, char):
         self.updated.emit(char)
 
 
+# Class for the GUI element displaying the Register Table
 class RegisterTable(QTableWidget):
     def __init__(self, *args):
         QTableWidget.__init__(self, *args)
@@ -236,10 +264,14 @@ class RegisterTable(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setVisible(False)
 
+    # Set the visual data to be the same as the underlying registers
     def setData(self):
         reg_num0 = 0
         reg_num1 = 4
         index = 0
+
+        # This basically just makes sure the registers go from 0 to 7 down the columns
+        # TODO: make this less weird
         for row in range(self.rowCount()):
             for col in range(self.columnCount()):
                 if index % 3 < 2:
@@ -254,12 +286,13 @@ class RegisterTable(QTableWidget):
                     self.setItem(row, col, QTableWidgetItem(QString(reg_info)))
                 index += 1
 
+        # Manually set the rest of the register info
         self.setItem(0, 2, QTableWidgetItem(QString('PC        ' + to_hex_string(registers.PC))))
         self.setItem(1, 2, QTableWidgetItem(QString('IR         ' + to_hex_string(registers.IR))))
         self.setItem(2, 2, QTableWidgetItem(QString('PSR      ' + to_hex_string(registers.PSR))))
         self.setItem(3, 2, QTableWidgetItem(QString('CC        ' + '{:03b}'.format(registers.CC))))
 
-
+# Class for the memory table GUI element
 class MemoryTable(QTableWidget):
     def __init__(self, *args):
         QTableWidget.__init__(self, *args)
@@ -273,6 +306,7 @@ class MemoryTable(QTableWidget):
         self.horizontalHeader().setVisible(False)
         self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
 
+    # Same as register setData, although there might be a way to make this faster
     def setData(self):
         for row in range(self.rowCount()):
             inst = memory.memory[row]
@@ -290,6 +324,7 @@ class MemoryTable(QTableWidget):
             inst_list = parser.parse_any(inst)
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
+    # Used when we know the range of the data to update, so that we don't have to update the entire table
     def setDataRange(self, start, stop):
         for row in range(start, stop, 1):
             inst = memory.memory[row]
@@ -308,7 +343,7 @@ class MemoryTable(QTableWidget):
             inst_list = parser.parse_any(inst)
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
-
+# Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
     def file_open(self, main):
         name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
@@ -316,17 +351,22 @@ class FileDialog(QtGui.QFileDialog):
         main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
         main.mem_table.item(registers.PC, 0).setBackground(QtGui.QColor(240, 240, 240))
 
+        # Interval that we updated, used so that load times are faster
         interval = memory.load_instructions(name)
 
         main.mem_table.setDataRange(interval[0], interval[1])
         main.mem_table.verticalScrollBar().setValue(interval[0])
 
+
+# Class for the search bar
+# TODO: add dropdown of recent searches
 class SearchBar(QtGui.QLineEdit):
     def __init__(self, mem_table, *args):
         QtGui.QLineEdit.__init__(self, *args)
         self.mem_table = mem_table
         self.connect(self, SIGNAL("returnPressed()"), self.goto_line)
 
+    # Submit the search result and hop to that line
     def goto_line(self):
         line = str(self.text())
         if line[0] == 'x':
@@ -334,10 +374,11 @@ class SearchBar(QtGui.QLineEdit):
         self.mem_table.verticalScrollBar().setValue(int(line, 16))
         self.clear()
 
-
+# Class for the row of buttons under the register table
 class ButtonRow(QtGui.QWidget):
     def __init__(self, window, *args):
         QtGui.QWidget.__init__(self, *args)
+        # Set layout to grid, then add all the buttons and their functions
         self.grid = QtGui.QGridLayout()
         self.run_button = QtGui.QPushButton('Run', self)
         self.run_button.setMinimumHeight(40)
@@ -357,6 +398,7 @@ class ButtonRow(QtGui.QWidget):
 
         self.list_buttons()
 
+    # Put the buttons in the GUI
     def list_buttons(self):
         self.grid.addWidget(self.run_button, 0, 0)
         self.grid.addWidget(self.step_button, 0, 1)
@@ -364,6 +406,8 @@ class ButtonRow(QtGui.QWidget):
         self.grid.addWidget(self.pc_button, 0, 3)
         self.setLayout(self.grid)
 
+
+# Found this on SO, it works so I leave it
 class Thread(QtCore.QThread):
     """Need for PyQt4 <= 4.6 only"""
     def __init__(self, parent=None):
