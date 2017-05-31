@@ -29,8 +29,8 @@ os_file_name = "operating_sys_lc3.txt"
 # Main function, initializes memory and starts running instructions
 def main():
     memory.load_os(os_file_name, 65536)
-    memory.load_instructions('instructions/charCount/charCount.obj', registers)
-    memory.load_instructions('instructions/charCount/main.obj', registers)
+    # memory.load_instructions('instructions/charCount/charCount.obj')
+    # memory.load_instructions('instructions/charCount/main.obj')
     memory[MCR] = 0xFFFF
     create_UI()
     run_instructions()
@@ -43,7 +43,7 @@ def main():
 def create_UI():
     app = QtGui.QApplication(sys.argv)
     app.setStyle("plastique")
-    GUI = SimUI.Window(memory, registers)
+    GUI = SimUI.Window()
     GUI.show()
     sys.exit(app.exec_())
 
@@ -60,7 +60,23 @@ def run_instructions(console):
         handle_instruction(inst, console)
         if not ON and registers.PC == sign_extend(0xFD79, 16):
             memory[MCR] = 0x7FFF
-            update_gui_registers(console)
+            break
+        if memory.paused:
+            break
+    memory.paused = False
+    update_gui_registers(console)
+    QtCore.QMetaObject.invokeMethod(console, 'emit_done', Qt.DirectConnection)
+
+
+def step_instruction(console):
+    if (memory[MCR] >> 15) & 0b1 == 1:
+        registers.PC += 1
+        inst = memory[registers.PC - 1]
+        registers.IR = inst
+        handle_instruction(inst, console)
+        if not ON and registers.PC == sign_extend(0xFD79, 16):
+            memory[MCR] = 0x7FFF
+        update_gui_registers(console)
 
 
 # Finds instruction and tells handle to execute it
@@ -98,33 +114,18 @@ def handle_instruction(inst, console):
     elif str_op == 'TRAP':
         handle_trap(inst)
 
-def kbhit(hit):
-    char = hit
-    time.sleep(0.0001)
-    if char:
-        memory[KBSR] = memory[KBSR] + 0x8000
-        if hit == 0x0D:
-            char = 0x0A
-        memory[KBDR] = char
-        return True
-    return False
 
 # See if status registers have been updated
 def poll_status_registers(console):
-    QtCore.QMetaObject.invokeMethod(console, 'sendKey', Qt.DirectConnection)
-
-# For future use (when threads are added)
-def update_keyboard():
-    while ON:
-        poll_status_registers()
+    pass
+    # QtCore.QMetaObject.invokeMethod(console, 'sendKey', Qt.DirectConnection)
+    # if memory[KBDR]
 
 
 # Handle the Display Data Register, called when updated
 def handle_DDR(console):
     if (memory[DSR] >> 15) & 0b1 == 1:
         if memory[DDR] in range(256):
-            pass
-            #sys.stdout.write(chr(memory[DDR]))
             QtCore.QMetaObject.invokeMethod(console, 'sendAppend', Qt.DirectConnection, QtCore.Q_ARG(str, str(chr(memory[DDR]))))
 
 
@@ -132,7 +133,6 @@ def handle_DDR(console):
 def handle_KBSR(console):
     if (memory[KBSR] >> 15) & 1 == 1:
         memory[KBSR] = memory[KBSR] & 0x4000  # Reset KBSR
-    poll_status_registers(console)
 
 
 #

@@ -43,6 +43,7 @@ class Registers(object):
 class Memory(object):
     def __init__(self, memory=None):
         self.memory = memory
+        self.paused = False
 
     def __getitem__(self, position):
         return self.memory[position]
@@ -50,13 +51,16 @@ class Memory(object):
     def __setitem__(self, position, item):
         self.memory[position] = item
 
-    def load_instructions(self, fname, regs):
+    def load_instructions(self, fname):
         inst_list = parse_obj(fname)
         orig = int(inst_list.pop(0), 2)
+        total = 0
         for i, inst in enumerate(inst_list):
             self.memory[sign_extend(orig, 16) + i] = int(inst, 2)
-            i += 1
-        regs.set_origin(orig)
+            total += 1
+        registers.set_origin(orig)
+        return orig, orig + total
+
 
     # Loads LC3 Operating System from text file
     def load_os(self, fname, nrow):
@@ -64,7 +68,6 @@ class Memory(object):
         with open(fname) as f:
             for irow, line in enumerate(f):
                 self[irow] = int(line, 2)
-
 
 # Parse .obj files
 def parse_obj(fname):
