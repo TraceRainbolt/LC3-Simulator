@@ -4,9 +4,9 @@ from PyQt4 import QtGui, QtCore
 from PyQt4.QtCore import QString, SIGNAL
 from PyQt4.QtGui import QTableWidgetItem, QTableWidget, QTextEdit, QLineEdit
 
-from LC3main import to_hex_string
-from LC3main import to_bin_string
-import LC3main
+from lc3_logic import to_hex_string
+from lc3_logic import to_bin_string
+import lc3_logic
 
 import instruction_parser as parser
 from storage import Registers
@@ -114,7 +114,7 @@ class Window(QtGui.QMainWindow):
         self.console.clear()
 
     def reinitialize_machine(self):
-        memory.load_os("operating_sys_lc3.txt", 65536)
+        memory.load_os(lc3_logic.os_file_name, 65536)
         self.mem_table.setData()
 
     @staticmethod
@@ -198,13 +198,13 @@ class RunHandler(QtCore.QObject):
     def run_app(self):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
-        LC3main.run_instructions(self)
+        lc3_logic.run_instructions(self)
         self.emit_done()
 
     def step_app(self):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
-        LC3main.step_instruction(self)
+        lc3_logic.step_instruction(self)
         self.emit_done()
 
     @QtCore.pyqtSlot()

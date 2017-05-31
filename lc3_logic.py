@@ -23,7 +23,7 @@ MCR = -2  # 0xFFFE
 current_key = 0
 
 # Location of OS file
-os_file_name = "operating_sys_lc3.txt"
+os_file_name = "LC3_OS.bin"
 
 
 # Main function, initializes memory and starts running instructions
