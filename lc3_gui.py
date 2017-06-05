@@ -1,6 +1,7 @@
 import sys
 
 from PyQt4 import QtGui, QtCore
+from PyQt4.QtCore import Qt
 from PyQt4.QtCore import QString, SIGNAL
 from PyQt4.QtGui import QTableWidgetItem, QTableWidget, QTextEdit, QLineEdit
 
@@ -33,10 +34,11 @@ class Window(QtGui.QMainWindow):
         self.file_dialog = FileDialog()
         self.setGeometry(100, 100, 1000, 1000)
         self.setWindowTitle("LC3 Simulator")
-        # self.setWindowIcon(QtGui.Icon('logo.png'))
+        self.setWindowIcon(QtGui.QIcon('LC3_logo.png'))
         self.setupFileMenu()
         self.console = Console()
         self.console_thread = None
+        self.speed_slider = SpeedSlider(self)
         self.worker = RunHandler(self)
 
         self.modified_data = []
@@ -45,6 +47,7 @@ class Window(QtGui.QMainWindow):
         self.reg_table = RegisterTable(4, 3)
         self.search_bar = SearchBar(self.mem_table)
         self.buttons = ButtonRow(self)
+
         self.grid = QtGui.QGridLayout()
 
         self.home()
@@ -62,6 +65,7 @@ class Window(QtGui.QMainWindow):
         self.grid.addWidget(self.buttons, 1, 0)
         self.grid.addWidget(self.search_bar, 2, 0)
         self.grid.addWidget(self.mem_table, 3, 0)
+        # self.grid.addWidget(self.speed_slider, 0, 1)
         self.grid.addWidget(self.console, 3, 1)
         self.grid.setRowStretch(0, 3)
         self.grid.setRowStretch(1, 1)
@@ -99,6 +103,16 @@ class Window(QtGui.QMainWindow):
         runAction.setStatusTip('Run the simulation from the current PC')
         runAction.triggered.connect(lambda: self.run(False))
 
+        stepAction = QtGui.QAction("&Step", self)
+        stepAction.setShortcut("Ctrl+T")
+        stepAction.setStatusTip('Step one instruction forward from the current PC')
+        stepAction.triggered.connect(lambda: self.run(True))
+
+        stopAction = QtGui.QAction("&Stop", self)
+        stopAction.setShortcut("Ctrl+P")
+        stopAction.setStatusTip('Pause the simulation')
+        stopAction.triggered.connect(self.suspend_process)
+
         # Show the status bar tips
         self.statusBar()
 
@@ -113,6 +127,8 @@ class Window(QtGui.QMainWindow):
         # Execute menu setup
         executeMenu = mainMenu.addMenu('&Execute')
         executeMenu.addAction(runAction)
+        executeMenu.addAction(stepAction)
+        executeMenu.addAction(stopAction)
 
     @QtCore.pyqtSlot(str)
     def append_text(self, text):
@@ -170,7 +186,7 @@ class Window(QtGui.QMainWindow):
         memory.paused = True
 
     # Set the current PC pointer (blue box) to the correct instruction
-    # TODO: remove magic numbers and make methods for moving the PC pointer
+    # TODO: make methods for moving the PC pointer
     def set_pc(self, place=None):
         row = registers.PC & bit_mask
         self.mem_table.item(row, 0).setBackground(default_color)
@@ -186,6 +202,10 @@ class Window(QtGui.QMainWindow):
         self.mem_table.item(row, 0).setBackground(pc_color)
         self.reg_table.setData()
         self.mem_table.setFocus()
+        self.mem_table.clearSelection()
+
+    def jump_to_pc(self):
+        self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
 
     # Called when ready to append to console
     def on_data_ready(self, data):
@@ -423,20 +443,28 @@ class ButtonRow(QtGui.QWidget):
         # Set layout to grid, then add all the buttons and their functions
         self.grid = QtGui.QGridLayout()
         self.run_button = QtGui.QPushButton('Run', self)
-        self.run_button.setMinimumHeight(40)
+        self.run_button.setMaximumSize(70, 120)
         self.run_button.clicked.connect(lambda: window.run(False))
 
         self.step_button = QtGui.QPushButton('Step', self)
-        self.step_button.setMinimumHeight(40)
+        self.step_button.setMaximumSize(70, 120)
         self.step_button.clicked.connect(lambda: window.run(True))
 
+        self.step_over_button = QtGui.QPushButton('Step Over', self)
+        self.step_over_button.setMaximumSize(70, 120)
+        self.step_over_button.clicked.connect(lambda: window.run(True))
+
         self.stop_button = QtGui.QPushButton('Stop', self)
-        self.stop_button.setMinimumHeight(40)
+        self.stop_button.setMaximumSize(70, 120)
         self.stop_button.clicked.connect(window.suspend_process)
 
         self.pc_button = QtGui.QPushButton('Set PC', self)
-        self.pc_button.setMinimumHeight(40)
+        self.pc_button.setMaximumSize(70, 120)
         self.pc_button.clicked.connect(window.set_pc)
+
+        self.jump_button = QtGui.QPushButton('Go to PC', self)
+        self.jump_button.setMaximumSize(70, 120)
+        self.jump_button.clicked.connect(window.jump_to_pc)
 
         self.list_buttons()
 
@@ -444,9 +472,41 @@ class ButtonRow(QtGui.QWidget):
     def list_buttons(self):
         self.grid.addWidget(self.run_button, 0, 0)
         self.grid.addWidget(self.step_button, 0, 1)
-        self.grid.addWidget(self.stop_button, 0, 2)
-        self.grid.addWidget(self.pc_button, 0, 3)
+        self.grid.addWidget(self.step_over_button, 0, 2)
+        self.grid.addWidget(self.stop_button, 0, 4)
+        self.grid.addWidget(self.pc_button, 0, 5)
+        self.grid.addWidget(self.jump_button, 0, 6)
         self.setLayout(self.grid)
+
+class SpeedSlider(QtGui.QWidget):
+    def __init__(self, window, *args):
+        QtGui.QWidget.__init__(self, *args)
+        self.grid = QtGui.QGridLayout()
+
+        self.label = QtGui.QLabel("Simulator Speed: ", self)
+
+        self.slider = QtGui.QSlider(Qt.Horizontal, self)
+        self.slider.setMinimum(-1)
+        self.slider.setMaximum(101)
+        self.slider.setValue(0)
+        self.slider.setTickPosition(QtGui.QSlider.TicksBelow)
+        self.slider.setTickInterval(10)
+        self.slider.setMinimumWidth(200)
+        self.slider.sliderMoved.connect(self.handle_move)
+
+        self.speed = QtGui.QLabel(str(self.slider.value()), self)
+
+        self.place_slider()
+
+    def place_slider(self):
+        self.grid.addWidget(self.label, 0, 0)
+        self.grid.addWidget(self.slider, 0, 1)
+        self.grid.addWidget(self.speed, 0, 2)
+        self.setLayout(self.grid)
+
+    def handle_move(self):
+        self.speed.setText(str(self.slider.value()))
+        memory.speed = self.slider.value()
 
 
 # Found this on SO, it works so I leave it
