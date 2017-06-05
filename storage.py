@@ -49,6 +49,7 @@ class Memory(object):
         self.memory = np.empty(nrow, dtype='int16')
         self.paused = False
         self.modified_data = []
+        self.speed = 0
 
     def __getitem__(self, position):
         return self.memory[position]
