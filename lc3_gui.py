@@ -21,10 +21,16 @@ MCR = -2  # 0xFFFE
 
 default_origin = 0x3000
 
+bit_mask = 0xFFFF  # bit mask to 'convert' signed int to unsigned, 0xFFFF = 16 bit
+
+pc_color = QtGui.QColor(10, 206, 101)
+default_color = QtGui.QColor(240, 240, 240)
+
 class Window(QtGui.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
-        self.file_diag = FileDialog()
+        self.thread = QtCore.QThread()
+        self.file_dialog = FileDialog()
         self.setGeometry(100, 100, 1000, 1000)
         self.setWindowTitle("LC3 Simulator")
         # self.setWindowIcon(QtGui.Icon('logo.png'))
@@ -41,9 +47,8 @@ class Window(QtGui.QMainWindow):
         self.buttons = ButtonRow(self)
         self.grid = QtGui.QGridLayout()
 
-        self.mem_table.verticalScrollBar().setValue(default_origin)
-
         self.home()
+        self.reinitialize_machine()
 
     def __del__(self):
         # Restore sys.stdout
@@ -65,7 +70,6 @@ class Window(QtGui.QMainWindow):
 
         centralWidget.setLayout(self.grid)
         self.setCentralWidget(centralWidget)
-
         self.show()
 
     def setupFileMenu(self):
@@ -111,7 +115,7 @@ class Window(QtGui.QMainWindow):
         executeMenu.addAction(runAction)
 
     @QtCore.pyqtSlot(str)
-    def appendText(self, text):
+    def append_text(self, text):
         """Append text to the QTextEdit."""
         # Maybe QTextEdit.append() works as well, but this is how I do it:
         cursor = self.console.textCursor()
@@ -122,12 +126,12 @@ class Window(QtGui.QMainWindow):
 
     # Slot for receiving table updates
     @QtCore.pyqtSlot()
-    def updateSimTables(self):
+    def update_gui_tables(self):
         self.reg_table.setData()
 
     # Open the file dialog to select program to load
     def load_program(self):
-        self.file_diag.file_open(self)
+        self.file_dialog.file_open(self)
 
     # Clear the console
     def clear_console(self):
@@ -152,7 +156,7 @@ class Window(QtGui.QMainWindow):
                 self.mem_table.setDataRange(address, address)
         memory.reset_modified()
         self.console.clear()
-        self.mem_table.verticalScrollBar().setValue(registers.PC)
+        self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
 
 
     # Exit the entire application safely
@@ -162,43 +166,42 @@ class Window(QtGui.QMainWindow):
 
     # Used for stopping in the middle of an execution, activated by the STOP button
     def suspend_process(self):
-        self.mem_table.verticalScrollBar().setValue(registers.PC)
+        self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
         memory.paused = True
 
     # Set the current PC pointer (blue box) to the correct instruction
     # TODO: remove magic numbers and make methods for moving the PC pointer
     def set_pc(self, place=None):
-        row = int(to_hex_string(registers.PC)[1:], 16)
-        self.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+        row = registers.PC & bit_mask
+        self.mem_table.item(row, 0).setBackground(default_color)
 
         if not place:
             index = self.mem_table.selectedIndexes()[0]
             registers.PC = index.row()
-            row = int(to_hex_string(registers.PC)[1:], 16)
+            row = registers.PC & bit_mask
         else:
             row = place
             registers.PC = place
 
-        self.mem_table.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
+        self.mem_table.item(row, 0).setBackground(pc_color)
         self.reg_table.setData()
         self.mem_table.setFocus()
 
     # Called when ready to append to console
     def on_data_ready(self, data):
-        self.appendText(data)
+        self.append_text(data)
 
     # This initializes a worker (RunHandler) to take care of moving signals into slots
     # Also starts up thread and makes all proper connections
     def run(self, step):
         memory[MCR] = 0xFFFF
-        self.thread = QtCore.QThread()
         self.console_thread = self.thread
         self.worker = RunHandler(self)
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.thread.quit)
-        self.worker.update_regs.connect(self.updateSimTables)
-        self.worker.updated.connect(self.appendText)
+        self.worker.update_regs.connect(self.update_gui_tables)
+        self.worker.updated.connect(self.append_text)
 
         if not step:
             self.thread.started.connect(self.worker.run_app)
@@ -249,16 +252,19 @@ class RunHandler(QtCore.QObject):
 
     # Start running the the code
     def run_app(self):
-        row = int(to_hex_string(registers.PC)[1:], 16)
-        self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+        row = registers.PC & bit_mask
+        self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.run_instructions(self)
+        self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
 
     # Step through the code
     def step_app(self):
-        row = int(to_hex_string(registers.PC)[1:], 16)
-        self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+        row = registers.PC & bit_mask
+        self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
+        if registers.PC & bit_mask - row > 24:
+            self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
 
     # Slot for ending the current instruction run and closing the thread
@@ -268,14 +274,14 @@ class RunHandler(QtCore.QObject):
 
     # Slot for updating the Register/Memory tables
     @QtCore.pyqtSlot()
-    def sendRegTable(self):
+    def send_update_gui_tables(self):
         self.update_regs.emit()
-        row = int(to_hex_string(registers.PC)[1:], 16)
-        self.main.mem_table.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
+        row = registers.PC & bit_mask
+        self.main.mem_table.item(row, 0).setBackground(pc_color)
 
     # Slot for sending output to console
     @QtCore.pyqtSlot(str)
-    def sendAppend(self, char):
+    def send_append_text(self, char):
         self.updated.emit(char)
 
 
@@ -344,9 +350,9 @@ class MemoryTable(QTableWidget):
             inst_hex = to_hex_string(inst)
 
             self.setItem(row, 0, QtGui.QTableWidgetItem())
-            self.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+            self.item(row, 0).setBackground(default_color)
             if row == registers.PC:
-                self.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
+                self.item(row, 0).setBackground(pc_color)
 
             self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
@@ -362,10 +368,10 @@ class MemoryTable(QTableWidget):
             inst_hex = to_hex_string(inst)
 
             self.setItem(row, 0, QtGui.QTableWidgetItem())
-            self.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
+            self.item(row, 0).setBackground(default_color)
 
             if row == registers.PC:
-                self.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
+                self.item(row, 0).setBackground(pc_color)
 
             self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
@@ -384,7 +390,7 @@ class FileDialog(QtGui.QFileDialog):
         name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
 
         # main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
-        main.mem_table.item(registers.PC, 0).setBackground(QtGui.QColor(240, 240, 240))
+        main.mem_table.item(registers.PC, 0).setBackground(default_color)
 
         # Interval that we updated, used so that load times are faster
         interval = memory.load_instructions(name)

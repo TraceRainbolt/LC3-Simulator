@@ -39,7 +39,7 @@ def create_UI():
 
 # Updates the register table to display to the UI
 def update_gui_registers(console):
-    QtCore.QMetaObject.invokeMethod(console, 'sendRegTable', Qt.DirectConnection)
+    QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_tables', Qt.DirectConnection)
 
 # Handles basics for running instructions
 def run_instructions(console):
@@ -117,7 +117,7 @@ def poll_status_registers(console):
 def handle_DDR(console):
     if (memory[DSR] >> 15) & 0b1 == 1:
         if memory[DDR] in range(256):
-            QtCore.QMetaObject.invokeMethod(console, 'sendAppend', Qt.DirectConnection, QtCore.Q_ARG(str, str(chr(memory[DDR]))))
+            QtCore.QMetaObject.invokeMethod(console, 'send_append_text', Qt.DirectConnection, QtCore.Q_ARG(str, str(chr(memory[DDR]))))
 
 
 # Handle the Keyboard Status Register, called when updated
