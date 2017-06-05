@@ -19,6 +19,8 @@ DSR = -508  # 0xFE04
 DDR = -506  # 0xFE06
 MCR = -2  # 0xFFFE
 
+default_origin = 0x3000
+
 class Window(QtGui.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
@@ -38,6 +40,8 @@ class Window(QtGui.QMainWindow):
         self.search_bar = SearchBar(self.mem_table)
         self.buttons = ButtonRow(self)
         self.grid = QtGui.QGridLayout()
+
+        self.mem_table.verticalScrollBar().setValue(default_origin)
 
         self.home()
 
@@ -132,6 +136,14 @@ class Window(QtGui.QMainWindow):
     # Reinitialize machine
     # TODO: make this faster (probably by running in its own thread)
     def reinitialize_machine(self):
+        for i, register in enumerate(registers):
+            registers[i] = 0
+        self.set_pc(0x3000)
+        registers.IR = 0
+        registers.CC = 0b010
+        registers.PSR = 0x8000 + registers.CC
+        self.reg_table.setData()
+
         memory.load_os()
         for address in memory.modified_data:
             if 0x514 <= address <= 0xFA00:          # If address is not in OS segment of memory, clear it to 0
@@ -139,6 +151,8 @@ class Window(QtGui.QMainWindow):
             else:                                   # Else set it to the correct OS data
                 self.mem_table.setDataRange(address, address)
         memory.reset_modified()
+        self.console.clear()
+        self.mem_table.verticalScrollBar().setValue(registers.PC)
 
 
     # Exit the entire application safely
@@ -147,21 +161,24 @@ class Window(QtGui.QMainWindow):
         sys.exit(0)
 
     # Used for stopping in the middle of an execution, activated by the STOP button
-    @staticmethod
-    def suspend_process():
+    def suspend_process(self):
         self.mem_table.verticalScrollBar().setValue(registers.PC)
         memory.paused = True
 
     # Set the current PC pointer (blue box) to the correct instruction
     # TODO: remove magic numbers and make methods for moving the PC pointer
-    def set_pc(self):
+    def set_pc(self, place=None):
         row = int(to_hex_string(registers.PC)[1:], 16)
         self.mem_table.item(row, 0).setBackground(QtGui.QColor(240, 240, 240))
 
-        index = self.mem_table.selectedIndexes()[0]
-        registers.PC = index.row()
+        if not place:
+            index = self.mem_table.selectedIndexes()[0]
+            registers.PC = index.row()
+            row = int(to_hex_string(registers.PC)[1:], 16)
+        else:
+            row = place
+            registers.PC = place
 
-        row = int(to_hex_string(registers.PC)[1:], 16)
         self.mem_table.item(row, 0).setBackground(QtGui.QColor(110, 120, 255))
         self.reg_table.setData()
         self.mem_table.setFocus()
@@ -366,13 +383,12 @@ class FileDialog(QtGui.QFileDialog):
     def file_open(self, main):
         name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
 
-        main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
+        # main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
         main.mem_table.item(registers.PC, 0).setBackground(QtGui.QColor(240, 240, 240))
 
         # Interval that we updated, used so that load times are faster
         interval = memory.load_instructions(name)
 
-        print main.mem_table
         main.mem_table.setDataRange(interval[0], interval[1])
         main.mem_table.verticalScrollBar().setValue(interval[0])
         #  main.modified_data.append(interval)

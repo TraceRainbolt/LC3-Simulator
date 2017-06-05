@@ -13,6 +13,9 @@ class Registers(object):
     def __getitem__(self, position):
         return self.registers[position]
 
+    def __setitem__(self, position, item):
+        self.registers[position] = item
+
     # Handles .ORIG line
     def set_origin(self, origin):
         self.PC = origin
