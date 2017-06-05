@@ -42,8 +42,10 @@ class Registers(object):
 # Memory class: xFFFF memory locations, containing a singed 16 bit number
 class Memory(object):
     def __init__(self, memory=None):
-        self.memory = memory
+        nrow = 65536
+        self.memory = np.empty(nrow, dtype='int16')
         self.paused = False
+        self.modified_data = []
 
     def __getitem__(self, position):
         return self.memory[position]
@@ -63,11 +65,18 @@ class Memory(object):
 
 
     # Loads LC3 Operating System from text file
-    def load_os(self, fname, nrow):
-        self.memory = np.empty(nrow, dtype='int16')
+    def load_os(self):
+        fname = "LC3_OS.bin"
         with open(fname) as f:
             for irow, line in enumerate(f):
-                self[irow] = int(line, 2)
+                inst = int(line, 2)
+                if self.memory[irow] & 0xFFFF != inst:
+                    self.modified_data.append(irow)
+                    self[irow] = inst
+
+    def reset_modified(self):
+        self.modified_data = []
+
 
 # Parse .obj files
 def parse_obj(fname):

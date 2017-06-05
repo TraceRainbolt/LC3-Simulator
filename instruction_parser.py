@@ -5,7 +5,6 @@
 
 def parse_any(inst):
     opcode = inst >> 12
-
     str_op = parse_op(opcode)
 
     if str_op == 'ADD':
@@ -31,7 +30,7 @@ def parse_any(inst):
     elif str_op == 'BR':
         ret = parse_br(inst)
         if ret[1] == 0 and ret[2] == 0:
-            return 'NOP'
+            return ['NOP']
         return ret
     elif str_op == 'JSR':
         return parse_jsr(inst)

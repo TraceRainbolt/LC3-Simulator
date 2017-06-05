@@ -8,6 +8,7 @@ import alu
 import instruction_parser as parser
 from storage import *
 import lc3_gui
+import lc3_gui
 
 # Turn ON machine
 ON = True
@@ -24,8 +25,9 @@ os_file_name = "LC3_OS.bin"
 
 # Main function, initializes memory and starts running instructions
 def main():
-    memory.load_os(os_file_name, 65536)
-    memory[MCR] = 0xFFFF
+    memory.load_os()
+    memory.reset_modified()
+    memory[MCR] = 0x7FFF
     create_UI()
 
 def create_UI():

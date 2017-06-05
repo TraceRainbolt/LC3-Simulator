@@ -13,6 +13,12 @@ from storage import Registers
 from storage import *
 
 
+KBSR = -512  # 0xFE00
+KBDR = -510  # 0xFE02
+DSR = -508  # 0xFE04
+DDR = -506  # 0xFE06
+MCR = -2  # 0xFFFE
+
 class Window(QtGui.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
@@ -24,6 +30,8 @@ class Window(QtGui.QMainWindow):
         self.console = Console()
         self.console_thread = None
         self.worker = RunHandler(self)
+
+        self.modified_data = []
 
         self.mem_table = MemoryTable(65536, 5)
         self.reg_table = RegisterTable(4, 3)
@@ -124,8 +132,14 @@ class Window(QtGui.QMainWindow):
     # Reinitialize machine
     # TODO: make this faster (probably by running in its own thread)
     def reinitialize_machine(self):
-        memory.load_os(lc3_logic.os_file_name, 65536)
-        self.mem_table.setData()
+        memory.load_os()
+        for address in memory.modified_data:
+            if 0x514 <= address <= 0xFA00:          # If address is not in OS segment of memory, clear it to 0
+                self.mem_table.clearData(address)
+            else:                                   # Else set it to the correct OS data
+                self.mem_table.setDataRange(address, address)
+        memory.reset_modified()
+
 
     # Exit the entire application safely
     @staticmethod
@@ -159,6 +173,7 @@ class Window(QtGui.QMainWindow):
     # This initializes a worker (RunHandler) to take care of moving signals into slots
     # Also starts up thread and makes all proper connections
     def run(self, step):
+        memory[MCR] = 0xFFFF
         self.thread = QtCore.QThread()
         self.console_thread = self.thread
         self.worker = RunHandler(self)
@@ -192,17 +207,15 @@ class Console(QTextEdit):
     def keyPressEvent(self, event):
         if isinstance(event, QtGui.QKeyEvent):
             key = ord(str(event.text()))
-            KBSR = -512  # 0xFE00
-            KBDR = -510  # 0xFE02
-            memory[KBSR] = 0x8000
+            memory[KBSR] = 0x8000  # Set first bit of KBSR to 1, rest 0
             if key == 0x0D:
                 key = 0x0A
-            memory[KBDR] = key
+            memory[KBDR] = key  # Put key in KBDR
         QTextEdit.keyPressEvent(self, event)
 
 
 # Class for RunHandler, which handles all connections from GUI to logic
-# TODO: Refactor the variables so that their names make sense
+# TODO: Rename the variables so that their names make sense
 class RunHandler(QtCore.QObject):
     #
     # Below are all signals associated with this worker
@@ -343,6 +356,11 @@ class MemoryTable(QTableWidget):
             inst_list = parser.parse_any(inst)
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
+    def clearData(self, address):
+        self.setItem(address, 2, QTableWidgetItem(QString("0"*16)))
+        self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
+        self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
+
 # Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
     def file_open(self, main):
@@ -354,12 +372,14 @@ class FileDialog(QtGui.QFileDialog):
         # Interval that we updated, used so that load times are faster
         interval = memory.load_instructions(name)
 
+        print main.mem_table
         main.mem_table.setDataRange(interval[0], interval[1])
         main.mem_table.verticalScrollBar().setValue(interval[0])
+        #  main.modified_data.append(interval)
 
 
 # Class for the search bar
-# TODO: add dropdown of recent searches
+# TODO: add drop-down of recent searches
 class SearchBar(QtGui.QLineEdit):
     def __init__(self, mem_table, *args):
         QtGui.QLineEdit.__init__(self, *args)
