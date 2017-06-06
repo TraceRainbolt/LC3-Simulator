@@ -32,7 +32,7 @@ class Window(QtGui.QMainWindow):
         super(Window, self).__init__()
         self.thread = QtCore.QThread()
         self.file_dialog = FileDialog()
-        self.setGeometry(100, 100, 1000, 1000)
+        self.setGeometry(100, 100, 1033, 950)
         self.setWindowTitle("LC3 Simulator")
         self.setWindowIcon(QtGui.QIcon('LC3_logo.png'))
         self.setupFileMenu()
@@ -49,6 +49,8 @@ class Window(QtGui.QMainWindow):
         self.buttons = ButtonRow(self)
 
         self.grid = QtGui.QGridLayout()
+        self.right_grid = QtGui.QGridLayout()
+        self.left_grid = QtGui.QGridLayout()
 
         self.home()
         self.reinitialize_machine()
@@ -60,19 +62,27 @@ class Window(QtGui.QMainWindow):
     def home(self):
         # Setup the general layout of the UI
         centralWidget = QtGui.QWidget()
+        rightWidget = QtGui.QWidget()
+        leftWidget = QtGui.QWidget()
 
-        self.grid.addWidget(self.reg_table, 0, 0)
-        self.grid.addWidget(self.buttons, 1, 0)
-        self.grid.addWidget(self.search_bar, 2, 0)
-        self.grid.addWidget(self.mem_table, 3, 0)
-        # self.grid.addWidget(self.speed_slider, 0, 1)
-        self.grid.addWidget(self.console, 3, 1)
-        self.grid.setRowStretch(0, 3)
-        self.grid.setRowStretch(1, 1)
-        self.grid.setRowStretch(2, 1)
-        self.grid.setRowStretch(3, 17)
+        self.right_grid.addWidget(self.reg_table, 0, 0)
+        self.right_grid.addWidget(self.buttons, 1, 0)
+        self.right_grid.addWidget(self.console, 2, 0)
+        self.left_grid.addWidget(self.search_bar, 0, 0)
+        self.left_grid.addWidget(self.mem_table, 1, 0)
+
+        self.right_grid.setRowStretch(0, 2)
+        self.right_grid.setRowStretch(1, 1)
+        self.right_grid.setRowStretch(2, 11)
+
+        rightWidget.setLayout(self.right_grid)
+        leftWidget.setLayout(self.left_grid)
+
+        self.grid.addWidget(leftWidget, 0, 0)
+        self.grid.addWidget(rightWidget, 0, 1)
 
         centralWidget.setLayout(self.grid)
+        
         self.setCentralWidget(centralWidget)
         self.show()
 
