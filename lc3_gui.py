@@ -154,7 +154,6 @@ class Window(QtGui.QMainWindow):
         self.console.clear()
 
     # Reinitialize machine
-    # TODO: make this faster (probably by running in its own thread)
     def reinitialize_machine(self):
         for i, register in enumerate(registers):
             registers[i] = 0
@@ -171,6 +170,7 @@ class Window(QtGui.QMainWindow):
             else:                                   # Else set it to the correct OS data
                 self.mem_table.setDataRange(address, address)
         memory.reset_modified()
+        self.console.clear()
         self.console.clear()
         self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
 
@@ -301,7 +301,7 @@ class RunHandler(QtCore.QObject):
         row = registers.PC & bit_mask
         self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
-        if registers.PC & bit_mask - row > 24:
+        if registers.PC & bit_mask - row > 16:
             self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
 
@@ -425,17 +425,34 @@ class MemoryTable(QTableWidget):
 # Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
     def file_open(self, main):
-        name = QtGui.QFileDialog.getOpenFileName(self, 'Open File')
+        self.setNameFilters(["OBJ Files (*.obj)"])
+        self.selectNameFilter("OBJ Files (*.obj)")
+        file_names = self.getOpenFileNames(self, "Open files")
 
         # main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
+
+        found_default = False
+
+        if len(file_names) == 0:
+            return
         main.mem_table.item(registers.PC, 0).setBackground(default_color)
 
-        # Interval that we updated, used so that load times are faster
-        interval = memory.load_instructions(name)
+        for name in file_names:
+            interval = memory.load_instructions(name)
+            if interval[0] == default_origin:
+                found_default = True
+            # Interval that we updated, used so that load times are faster
+            main.mem_table.setDataRange(interval[0], interval[1])
+            main.mem_table.verticalScrollBar().setValue(interval[0])
+            main.modified_data.append(interval)
 
-        main.mem_table.setDataRange(interval[0], interval[1])
-        main.mem_table.verticalScrollBar().setValue(interval[0])
-        #  main.modified_data.append(interval)
+        # In place so that the default_origin (probably 0x3000) is used instead of most recent
+        # Only used if at least 1 file is found to start at default_origin
+        if found_default:
+            main.mem_table.item(registers.PC, 0).setBackground(default_color)
+            registers.set_origin(default_origin)
+            main.mem_table.item(registers.PC, 0).setBackground(pc_color)
+            main.mem_table.verticalScrollBar().setValue(default_origin)
 
 
 # Class for the search bar
