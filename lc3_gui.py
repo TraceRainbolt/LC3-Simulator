@@ -36,7 +36,7 @@ class Window(QtGui.QMainWindow):
         self.setWindowTitle("LC3 Simulator")
         self.setWindowIcon(QtGui.QIcon('LC3_logo.png'))
         self.setupFileMenu()
-        self.console = Console()
+        self.console = Console(self)
         self.console_thread = None
         self.speed_slider = SpeedSlider(self)
         self.worker = RunHandler(self)
@@ -234,24 +234,42 @@ class Window(QtGui.QMainWindow):
 
 # Class for the console that the machine prints to
 class Console(QTextEdit):
-    def __init__(self):
+    def __init__(self, main):
         super(QTextEdit, self).__init__()
         self.setReadOnly(True)
         self.current_key = None
         font = QtGui.QFont()
         font.setPointSize(10)
         self.setFont(font)
+        self.main = main
 
     # Override default keyPressEvent, update machine with correct information
     # TODO: enable keyboard interrupts, should be easy now that this is its own thread
     def keyPressEvent(self, event):
         if isinstance(event, QtGui.QKeyEvent):
             key = ord(str(event.text()))
-            memory[KBSR] = 0x8000  # Set first bit of KBSR to 1, rest 0
+            memory[KBSR] = memory[KBSR] + 0x8000  # Set first bit of KBSR to 1, rest 0
             if key == 0x0D:
                 key = 0x0A
             memory[KBDR] = key  # Put key in KBDR
+            if (memory[KBSR] >> 14) & 1 == 1:
+                self.initiate_service_routine(self.main, 0x80)
         QTextEdit.keyPressEvent(self, event)
+
+    @staticmethod
+    def initiate_service_routine(main, vector):
+        old_PSR = registers.PSR
+        old_PC = registers.PC
+        main.mem_table.item(old_PC, 0).setBackground(default_color)
+
+        registers.PSR = registers.PSR & 0x7FFF       # Enter Supervisor Mode
+        registers.PSR = registers.PSR | 0x0400       # Set priority level to PL4
+        SSP = registers.registers[6]                 # Set SSP to R6
+        memory[SSP] = old_PSR                        # Place PSR on top of Supervisor Stack
+        registers.registers[6] -= 1                  # Increment stack pointer
+        SSP = registers.registers[6]                 # Set SSP again
+        memory[SSP] = old_PC                         # Place PC on top of Supervisor Stack
+        registers.PC = memory[vector + 0x100] - 1    # Jump to interrupt vector table location (always 0x0180)
 
 
 # Class for RunHandler, which handles all connections from GUI to logic

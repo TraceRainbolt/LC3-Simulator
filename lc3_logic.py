@@ -28,6 +28,7 @@ def main():
     memory.load_os()
     memory.reset_modified()
     memory[MCR] = 0x7FFF
+    memory[KBSR] = 0x4000
     create_UI()
 
 def create_UI():
@@ -124,7 +125,6 @@ def handle_DDR(console):
 def handle_KBSR(console):
     if (memory[KBSR] >> 15) & 1 == 1:
         memory[KBSR] = memory[KBSR] & 0x4000  # Reset KBSR
-
 
 #
 # HANDLERS: THe following functions handle
@@ -255,14 +255,11 @@ def handle_br(inst):
 
 def handle_jsr(inst):
     inst_list = parser.parse_jsr(inst)
-    address = 0x0000
-    print "Here: ", to_hex_string(registers.PC)
     if inst_list[1] == 1:  # JSR
         address = registers.PC + sign_extend(inst_list[2], 11)
     else:  # JSRR
         BaseR = inst_list[2]
         address = registers.registers[BaseR]
-        print to_hex_string(address)
     registers.registers[7] = registers.PC
     registers.PC = address
 

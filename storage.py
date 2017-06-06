@@ -21,7 +21,7 @@ class Registers(object):
         self.PC = origin
 
     def set_CC(self, value):
-        self.PSR = 0x8000 + self.CC
+        self.PSR = (self.PSR & 0xFFF8) + self.CC
         if value < 0:
             self.CC = 0b100
         elif value == 0:

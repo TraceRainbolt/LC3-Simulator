@@ -131,7 +131,8 @@ def parse_jsr(inst):
 
 
 def parse_ret(inst):
-    return ['RET']
+    DR = get_SR(inst)
+    return ['RET', DR]
 
 
 def parse_rti(inst):
