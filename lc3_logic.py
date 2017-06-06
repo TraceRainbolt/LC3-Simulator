@@ -176,7 +176,8 @@ def handle_and(inst):
 def handle_ld(inst, console):
     inst_list = parser.parse_ld(inst)
     DR = inst_list[1]
-    address = registers.PC + sign_extend(inst_list[2], 16)
+    address = registers.PC + sign_extend(inst_list[2], 9)
+    print address
     value = memory[address]
     registers.set_CC(value)
     if address == KBSR:
