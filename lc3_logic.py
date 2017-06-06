@@ -177,7 +177,6 @@ def handle_ld(inst, console):
     inst_list = parser.parse_ld(inst)
     DR = inst_list[1]
     address = registers.PC + sign_extend(inst_list[2], 9)
-    print address
     value = memory[address]
     registers.set_CC(value)
     if address == KBSR:
@@ -257,18 +256,21 @@ def handle_br(inst):
 def handle_jsr(inst):
     inst_list = parser.parse_jsr(inst)
     address = 0x0000
+    print "Here: ", to_hex_string(registers.PC)
     if inst_list[1] == 1:  # JSR
         address = registers.PC + sign_extend(inst_list[2], 11)
     else:  # JSRR
         BaseR = inst_list[2]
         address = registers.registers[BaseR]
+        print to_hex_string(address)
     registers.registers[7] = registers.PC
     registers.PC = address
 
 
 def handle_ret(inst):
     inst_list = parser.parse_ret(inst)
-    registers.PC = registers.registers[7]
+    BaseR = inst_list[1]
+    registers.PC = registers.registers[BaseR]
 
 
 def handle_rti(inst):
