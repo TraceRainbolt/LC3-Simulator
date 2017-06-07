@@ -42,14 +42,14 @@ class Registers(object):
         print "CC: " + '{:03b}'.format(self.CC)
 
 
-# Memory class: xFFFF memory locations, containing a singed 16 bit number
+# Memory class: 0xFFFF memory locations, containing a singed 16 bit number
 class Memory(object):
     def __init__(self, memory=None):
         nrow = 65536
         self.memory = np.empty(nrow, dtype='int16')
         self.paused = False
         self.modified_data = []
-        self.speed = 0
+        self.instructions_ran = 0
 
     def __getitem__(self, position):
         return self.memory[position]
@@ -65,8 +65,7 @@ class Memory(object):
             self.memory[sign_extend(orig, 16) + i] = int(inst, 2)
             total += 1
         registers.set_origin(orig)
-        return orig, orig + total
-
+        return orig, orig + total  # Return interval that was modified
 
     # Loads LC3 Operating System from text file
     def load_os(self):
@@ -98,13 +97,13 @@ def parse_obj(fname):
         j += 2
     return combined_chars
 
+# Create an instance (singleton) of the memory and the registers
 memory = Memory()
 registers = Registers(np.array([0, 0, 0, 0, 0, 0, 0, 0], dtype='int16'), 0, 0, 0)
 
 # Used for properly formatting/printing hex numbers
 def to_hex_string(val):
     return 'x' + '{:04x}'.format((val + (1 << 16)) % (1 << 16)).upper()
-
 
 # Sign extend, used for SEXTing offsets
 def sign_extend(val, bits):
