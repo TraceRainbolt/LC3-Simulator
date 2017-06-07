@@ -1,3 +1,7 @@
+import warnings
+
+warnings.simplefilter("ignore", RuntimeWarning)
+
 def execute_add(inst_list):
     return inst_list[0] + inst_list[1]
 
