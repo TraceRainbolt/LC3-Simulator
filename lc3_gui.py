@@ -38,12 +38,14 @@ class Window(QtGui.QMainWindow):
         self.setupFileMenu()
         self.console = Console(self)
         self.console_thread = None
-        self.speed_slider = SpeedSlider(self)
+        # self.speed_slider = SpeedSlider(self)
         self.worker = RunHandler(self)
-
         self.modified_data = []
 
+        self.mem_table = None
+        # TODO: make this faster
         self.mem_table = MemoryTable(65536, 5)
+
         self.reg_table = RegisterTable(4, 3)
         self.search_bar = SearchBar(self.mem_table)
         self.buttons = ButtonRow(self)
@@ -53,6 +55,7 @@ class Window(QtGui.QMainWindow):
         self.left_grid = QtGui.QGridLayout()
 
         self.home()
+
         self.reinitialize_machine()
 
     def __del__(self):
@@ -393,20 +396,24 @@ class MemoryTable(QTableWidget):
     # Same as register setData, although there might be a way to make this faster
     def setData(self):
         for row in range(self.rowCount()):
-            inst = memory.memory[row]
-            inst_bin = to_bin_string(inst)
-            inst_hex = to_hex_string(inst)
-
             self.setItem(row, 0, QtGui.QTableWidgetItem())
+            if 0x514 <= row <= 0xFA00:
+                self.clearData(row)
+            else:
+                inst = memory.memory[row]
+                inst_bin = to_bin_string(inst)
+                inst_hex = to_hex_string(inst)
+
+                self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
+                self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
+                self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
+                inst_list = parser.parse_any(inst)
+                self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+
             self.item(row, 0).setBackground(default_color)
             if row == registers.PC:
                 self.item(row, 0).setBackground(pc_color)
 
-            self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
-            self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
-            self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
-            inst_list = parser.parse_any(inst)
-            self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
     # Used when we know the range of the data to update, so that we don't have to update the entire table
     def setDataRange(self, start, stop):
@@ -428,6 +435,7 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
     def clearData(self, address):
+        self.setItem(address, 1, QTableWidgetItem(QString("x0000")))
         self.setItem(address, 2, QTableWidgetItem(QString("0"*16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
         self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
