@@ -106,14 +106,6 @@ def handle_instruction(inst, console):
     elif str_op == 'TRAP':
         handle_trap(inst)
 
-
-# See if status registers have been updated
-def poll_status_registers(console):
-    pass
-    # QtCore.QMetaObject.invokeMethod(console, 'sendKey', Qt.DirectConnection)
-    # if memory[KBDR]
-
-
 # Handle the Display Data Register, called when updated
 def handle_DDR(console):
     if (memory[DSR] >> 15) & 0b1 == 1:
@@ -166,7 +158,7 @@ def handle_and(inst):
         V2 = sign_extend(inst_list[4], 5)
     DR = inst_list[1]
     SR1 = registers[inst_list[2]]
-    # Let fsm execute add
+    # Let alu execute add
     inst_list_eval = [SR1, V2]
     value = alu.execute_and(inst_list_eval)
     registers.registers[DR] = value

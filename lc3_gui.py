@@ -13,7 +13,6 @@ import instruction_parser as parser
 from storage import Registers
 from storage import *
 
-
 KBSR = -512  # 0xFE00
 KBDR = -510  # 0xFE02
 DSR = -508  # 0xFE04
@@ -26,6 +25,7 @@ bit_mask = 0xFFFF  # bit mask to 'convert' signed int to unsigned, 0xFFFF = 16 b
 
 pc_color = QtGui.QColor(10, 206, 101)
 default_color = QtGui.QColor(240, 240, 240)
+
 
 class Window(QtGui.QMainWindow):
     def __init__(self):
@@ -85,7 +85,7 @@ class Window(QtGui.QMainWindow):
         self.grid.addWidget(rightWidget, 0, 1)
 
         centralWidget.setLayout(self.grid)
-        
+
         self.setCentralWidget(centralWidget)
         self.show()
 
@@ -178,14 +178,13 @@ class Window(QtGui.QMainWindow):
 
         memory.load_os()
         for address in memory.modified_data:
-            if 0x514 <= address <= 0xFA00:          # If address is not in OS segment of memory, clear it to 0
+            if 0x514 <= address <= 0xFA00:  # If address is not in OS segment of memory, clear it to 0
                 self.mem_table.clearData(address)
-            else:                                   # Else set it to the correct OS data
+            else:  # Else set it to the correct OS data
                 self.mem_table.setDataRange(address, address + 1)
         memory.reset_modified()
         self.console.clear()
         self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
-
 
     # Exit the entire application safely
     @staticmethod
@@ -274,14 +273,15 @@ class Console(QTextEdit):
         old_PC = registers.PC
         main.mem_table.item(old_PC, 0).setBackground(default_color)
 
-        registers.PSR = registers.PSR & 0x7FFF       # Enter Supervisor Mode
-        registers.PSR = registers.PSR | 0x0400       # Set priority level to PL4
-        SSP = registers.registers[6]                 # Set SSP to R6
-        memory[SSP] = old_PSR                        # Place PSR on top of Supervisor Stack
-        registers.registers[6] -= 1                  # Increment stack pointer
-        SSP = registers.registers[6]                 # Set SSP again
-        memory[SSP] = old_PC                         # Place PC on top of Supervisor Stack
-        registers.PC = memory[vector + 0x100] - 1    # Jump to interrupt vector table location (always 0x0180)
+        registers.PSR = registers.PSR & 0x7FFF  # Enter Supervisor Mode
+        registers.PSR = registers.PSR | 0x0400  # Set priority level to PL4
+        SSP = registers.registers[6]  # Set SSP to R6
+        registers.registers[6] -= 1  # Increment stack pointer
+        memory[SSP] = old_PSR  # Place PSR on top of Supervisor Stack
+        registers.registers[6] -= 1  # Increment stack pointer
+        SSP = registers.registers[6]  # Set SSP again
+        memory[SSP] = old_PC  # Place PC on top of Supervisor Stack
+        registers.PC = memory[vector + 0x100] - 1  # Jump to interrupt vector table location (always 0x0180)
 
 
 # Class for RunHandler, which handles all connections from GUI to logic
@@ -290,12 +290,12 @@ class RunHandler(QtCore.QObject):
     #
     # Below are all signals associated with this worker
     #
-    finished = QtCore.pyqtSignal()     # Used when done
-    updated = QtCore.pyqtSignal(str)   # Used when console is updated
+    finished = QtCore.pyqtSignal()  # Used when done
+    updated = QtCore.pyqtSignal(str)  # Used when console is updated
     update_regs = QtCore.pyqtSignal()  # Used when registers/memory is updated
-    started = QtCore.pyqtSignal()      # Used when started
+    started = QtCore.pyqtSignal()  # Used when started
 
-    def __init__(self, main,):
+    def __init__(self, main, ):
         super(QtCore.QObject, self).__init__()
         self.main = main
         self.is_running = False
@@ -389,14 +389,13 @@ class RegisterTable(QTableWidget):
             register = row + column
             self.edited_location = None
             if column % 3 == 2:
-                register -= 2                        # We must subtract 2 b/c the column + row combo will be off by 2 here
+                register -= 2  # We must subtract 2 b/c the column + row combo will be off by 2 here
                 dec_string = str(self.item(row, column).text())
                 reg_val = int(dec_string, 10)
                 reg_hex = to_hex_string(reg_val)
 
                 self.setItem(row, column - 1, QTableWidgetItem(QString(reg_hex)))
-                registers.registers[register] = reg_val  # Convert bit string at address to instruction
-
+                registers.registers[register] = reg_val  # Convert bit string at address to instruction\
 
 
 # Class for the memory table GUI element
@@ -438,7 +437,6 @@ class MemoryTable(QTableWidget):
             if row == registers.PC:
                 self.item(row, 0).setBackground(pc_color)
 
-
     # Used when we know the range of the data to update, so that we don't have to update the entire table
     def setDataRange(self, start, stop):
         for row in range(start, stop, 1):
@@ -460,7 +458,7 @@ class MemoryTable(QTableWidget):
 
     def clearData(self, address):
         self.setItem(address, 1, QTableWidgetItem(QString(to_hex_string(address))))
-        self.setItem(address, 2, QTableWidgetItem(QString("0"*16)))
+        self.setItem(address, 2, QTableWidgetItem(QString("0" * 16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
         self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
 
@@ -481,7 +479,6 @@ class MemoryTable(QTableWidget):
                 self.setItem(address, 3, QTableWidgetItem(QString(inst_hex)))
                 self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
                 memory[address] = inst  # Convert bit string at address to instruction
-
 
 
 # Class for the file dialog
@@ -533,6 +530,7 @@ class SearchBar(QtGui.QLineEdit):
         self.mem_table.verticalScrollBar().setValue(int(line, 16))
         self.clear()
 
+
 # Class for the row of buttons under the register table
 class ButtonRow(QtGui.QWidget):
     def __init__(self, window, *args):
@@ -575,6 +573,7 @@ class ButtonRow(QtGui.QWidget):
         self.grid.addWidget(self.jump_button, 0, 6)
         self.setLayout(self.grid)
 
+
 class SpeedSlider(QtGui.QWidget):
     def __init__(self, window, *args):
         QtGui.QWidget.__init__(self, *args)
@@ -609,13 +608,13 @@ class SpeedSlider(QtGui.QWidget):
 # Found this on SO, it works so I leave it
 class Thread(QtCore.QThread):
     """Need for PyQt4 <= 4.6 only"""
+
     def __init__(self, parent=None):
         QtCore.QThread.__init__(self, parent)
-
-     # this class is solely needed for these two methods, there
-     # appears to be a bug in PyQt 4.6 that requires you to
-     # explicitly call run and start from the subclass in order
-     # to get the thread to actually start an event loop
+        # this class is solely needed for these two methods, there
+        # appears to be a bug in PyQt 4.6 that requires you to
+        # explicitly call run and start from the subclass in order
+        # to get the thread to actually start an event loop
 
     def start(self):
         QtCore.QThread.start(self)
