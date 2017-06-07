@@ -46,7 +46,7 @@ class Window(QtGui.QMainWindow):
         # TODO: make this faster
         self.mem_table = MemoryTable(65536, 5)
 
-        self.reg_table = RegisterTable(4, 7)
+        self.reg_table = RegisterTable(4, 8)
         self.search_bar = SearchBar(self.mem_table)
         self.buttons = ButtonRow(self)
 
@@ -153,10 +153,15 @@ class Window(QtGui.QMainWindow):
         self.console.setTextCursor(cursor)
         self.console.ensureCursorVisible()
 
-    # Slot for receiving table updates
+    # Slot for receiving register updates
     @QtCore.pyqtSlot()
     def update_gui_tables(self):
         self.reg_table.setData()
+
+    # Slot for receiving memory updates
+    @QtCore.pyqtSlot(int)
+    def update_memory_table(self, changed):
+        self.mem_table.setDataRange(changed, changed + 1)
 
     # Open the file dialog to select program to load
     def load_program(self):
@@ -232,6 +237,7 @@ class Window(QtGui.QMainWindow):
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.thread.quit)
         self.worker.update_regs.connect(self.update_gui_tables)
+        self.worker.update_memory.connect(self.update_memory_table)
         self.worker.updated.connect(self.append_text)
 
         if not step:
@@ -292,8 +298,9 @@ class RunHandler(QtCore.QObject):
     #
     finished = QtCore.pyqtSignal()  # Used when done
     updated = QtCore.pyqtSignal(str)  # Used when console is updated
-    update_regs = QtCore.pyqtSignal()  # Used when registers/memory is updated
+    update_regs = QtCore.pyqtSignal()  # Used when registers are updated
     started = QtCore.pyqtSignal()  # Used when started
+    update_memory = QtCore.pyqtSignal(int)  # Used to update memory gui
 
     def __init__(self, main, ):
         super(QtCore.QObject, self).__init__()
@@ -313,7 +320,8 @@ class RunHandler(QtCore.QObject):
         row = registers.PC & bit_mask
         self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
-        if registers.PC & bit_mask - row > 16:
+        # TODO: make this work better (have it depend on where you are)
+        if registers.PC & bit_mask - row > 16 or registers.PC & bit_mask - row < -8:
             self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
 
@@ -334,6 +342,10 @@ class RunHandler(QtCore.QObject):
     def send_append_text(self, char):
         self.updated.emit(char)
 
+    @QtCore.pyqtSlot(int)
+    def send_update_gui_memory(self, changed):
+        self.update_memory.emit(changed)
+
 
 # Class for the GUI element displaying the Register Table
 class RegisterTable(QTableWidget):
@@ -350,7 +362,8 @@ class RegisterTable(QTableWidget):
         self.setColumnWidth(3, 30)
         self.setColumnWidth(4, 100)
         self.setColumnWidth(5, 50)
-        self.setColumnWidth(6, 124)
+        self.setColumnWidth(6, 30)
+        self.setColumnWidth(7, 94)
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setVisible(False)
         self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
@@ -363,24 +376,47 @@ class RegisterTable(QTableWidget):
     def setData(self):
         # This basically just makes sure the registers go from 0 to 7 down the columns
         for row in range(self.rowCount()):
-            for col in range(self.columnCount()):
+            for col in range(self.columnCount() - 1):  # Subtract 1 to work with easier numbers
                 reg_num = col + row
                 if col % 3 == 0:
                     self.setItem(row, col, QTableWidgetItem(QString('R' + str(reg_num))))
                     self.item(row, col).setBackground(default_color)
+                    self.item(row, col).setFlags(QtCore.Qt.ItemIsEnabled)
                 if col % 3 == 1:
                     self.setItem(row, col, QTableWidgetItem(QString(to_hex_string(registers[reg_num - 1]))))
                 if col % 3 == 2:
                     self.setItem(row, col, QTableWidgetItem(QString(str(registers[reg_num - 2]))))
 
         # Manually set the rest of the register info
-        self.setItem(0, 6, QTableWidgetItem(QString('PC        ' + to_hex_string(registers.PC))))
-        self.setItem(1, 6, QTableWidgetItem(QString('IR         ' + to_hex_string(registers.IR))))
-        self.setItem(2, 6, QTableWidgetItem(QString('PSR      ' + to_hex_string(registers.PSR))))
-        self.setItem(3, 6, QTableWidgetItem(QString('CC        ' + '{:03b}'.format(registers.CC))))
+        self.setItem(0, 6, QTableWidgetItem(QString('PC')))
+        self.item(0, 6).setBackground(default_color)
+        self.setItem(0, 7, QTableWidgetItem(QString(to_hex_string(registers.PC))))
+        self.item(0, 6).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.item(0, 7).setFlags(QtCore.Qt.ItemIsEnabled)
+
+        self.setItem(1, 6, QTableWidgetItem(QString('IR')))
+        self.item(1, 6).setBackground(default_color)
+        self.setItem(1, 7, QTableWidgetItem(QString(to_hex_string(registers.IR))))
+        self.item(1, 6).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.item(1, 7).setFlags(QtCore.Qt.ItemIsEnabled)
+
+        self.setItem(2, 6, QTableWidgetItem(QString('PSR')))
+        self.item(2, 6).setBackground(default_color)
+        self.setItem(2, 7, QTableWidgetItem(QString(to_hex_string(registers.PSR))))
+        self.item(2, 6).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.item(2, 7).setFlags(QtCore.Qt.ItemIsEnabled)
+
+        self.setItem(3, 6, QTableWidgetItem(QString('CC')))
+        self.item(3, 6).setBackground(default_color)
+        CC = '{:03b}'.format(registers.CC)
+        CC += ' (n)' if CC[0] == '1' else ' (z)' if CC[1] == '1' else ' (p)'  # Gives context to CC
+        self.setItem(3, 7, QTableWidgetItem(QString(CC)))
+        self.item(3, 6).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.item(3, 7).setFlags(QtCore.Qt.ItemIsEnabled)
 
     def set_edited_location(self):
-        self.edited_location = self.selectedIndexes()[0]
+        if self.selectedIndexes():
+            self.edited_location = self.selectedIndexes()[0]
 
     def update_internal_registers(self):
         if self.edited_location is not None:
@@ -395,7 +431,15 @@ class RegisterTable(QTableWidget):
                 reg_hex = to_hex_string(reg_val)
 
                 self.setItem(row, column - 1, QTableWidgetItem(QString(reg_hex)))
-                registers.registers[register] = reg_val  # Convert bit string at address to instruction\
+                registers.registers[register] = reg_val  # Convert bit string at address to instruction
+            if column % 3 == 1:
+                register -= 1  # We must subtract 2 b/c the column + row combo will be off by 2 here
+                hex_string = str(self.item(row, column).text()[1:])
+                reg_val = int(hex_string, 16)
+                reg_hex = str(reg_val)
+
+                self.setItem(row, column + 1, QTableWidgetItem(QString(reg_hex)))
+                registers.registers[register] = reg_val  # Convert bit string at address to instruction
 
 
 # Class for the memory table GUI element
@@ -428,14 +472,17 @@ class MemoryTable(QTableWidget):
                 inst_hex = to_hex_string(inst)
 
                 self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
+                self.item(row, 1).setFlags(QtCore.Qt.ItemIsEnabled)
                 self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
                 self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
                 inst_list = parser.parse_any(inst)
                 self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                self.item(row, 4).setFlags(QtCore.Qt.ItemIsEnabled)
 
             self.item(row, 0).setBackground(default_color)
             if row == registers.PC:
                 self.item(row, 0).setBackground(pc_color)
+            self.item(row, 0).setFlags(QtCore.Qt.ItemIsEnabled)
 
     # Used when we know the range of the data to update, so that we don't have to update the entire table
     def setDataRange(self, start, stop):
@@ -457,10 +504,13 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
     def clearData(self, address):
+        self.item(address, 0).setFlags(QtCore.Qt.ItemIsEnabled)
         self.setItem(address, 1, QTableWidgetItem(QString(to_hex_string(address))))
+        self.item(address, 1).setFlags(QtCore.Qt.ItemIsEnabled)
         self.setItem(address, 2, QTableWidgetItem(QString("0" * 16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
         self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
+        self.item(address, 4).setFlags(QtCore.Qt.ItemIsEnabled)
 
     def set_edited_location(self):
         self.edited_location = self.selectedIndexes()[0]
@@ -477,6 +527,15 @@ class MemoryTable(QTableWidget):
                 inst_list = parser.parse_any(inst)
 
                 self.setItem(address, 3, QTableWidgetItem(QString(inst_hex)))
+                self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                memory[address] = inst  # Convert bit string at address to instruction
+            if address and column == 3:
+                hex_string = str(self.item(address, 3).text()[1:])
+                inst = int(hex_string, 16)
+                inst_bin = to_bin_string(inst)
+                inst_list = parser.parse_any(inst)
+
+                self.setItem(address, 2, QTableWidgetItem(QString(inst_bin)))
                 self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
                 memory[address] = inst  # Convert bit string at address to instruction
 

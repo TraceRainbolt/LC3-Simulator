@@ -20,6 +20,8 @@ DSR = -508  # 0xFE04
 DDR = -506  # 0xFE06
 MCR = -2  # 0xFFFE
 
+bit_mask = 0xFFFF
+
 # Location of OS file
 os_file_name = "LC3_OS.bin"
 
@@ -110,13 +112,18 @@ def handle_instruction(inst, console):
 def handle_DDR(console):
     if (memory[DSR] >> 15) & 0b1 == 1:
         if memory[DDR] in range(256):
-            QtCore.QMetaObject.invokeMethod(console, 'send_append_text', Qt.DirectConnection, QtCore.Q_ARG(str, str(chr(memory[DDR]))))
+            QtCore.QMetaObject.invokeMethod(console, 'send_append_text', Qt.DirectConnection,
+                                            QtCore.Q_ARG(str, str(chr(memory[DDR]))))
 
 
 # Handle the Keyboard Status Register, called when updated
 def handle_KBSR(console):
     if (memory[KBSR] >> 15) & 1 == 1:
         memory[KBSR] = memory[KBSR] & 0x4000  # Reset KBSR
+
+def handle_update_gui_memory(console, changed):
+    QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_memory', Qt.DirectConnection,
+                                    QtCore.Q_ARG(int, changed))
 
 #
 # HANDLERS: THe following functions handle
@@ -214,15 +221,21 @@ def handle_st(inst, console):
     memory[address] = val
     if val == DDR:
         handle_DDR(console)
+    changed = address
+    handle_update_gui_memory(console, changed)
 
 
 def handle_sti(inst, console):
     inst_list = parser.parse_st(inst)
     SR = inst_list[1]
     address = registers.PC + sign_extend(inst_list[2], 9)
-    memory[memory[address]] = registers.registers[SR]
+    sti_addr = memory[address]
+    val = registers.registers[SR]
+    memory[sti_addr] = val
     if memory[address] == DDR:
         handle_DDR(console)
+    changed = sti_addr & bit_mask
+    handle_update_gui_memory(console, changed)
 
 
 def handle_str(inst, console):
@@ -230,9 +243,12 @@ def handle_str(inst, console):
     SR = inst_list[1]
     BaseR = inst_list[2]
     address = registers.registers[BaseR] + sign_extend(inst_list[3], 6)
-    memory[address] = registers.registers[SR]
+    val = registers.registers[SR]
+    memory[address] = val
     if registers.registers[SR] == DDR:
         handle_DDR(console)
+    changed = address
+    handle_update_gui_memory(console, changed)
 
 
 def handle_br(inst):
@@ -272,7 +288,6 @@ def handle_rti(inst):
         registers.CC = registers.PSR & 0b111
     else:
         print "Privilege mode exception."
-
 
 def handle_trap(inst):
     global ON
