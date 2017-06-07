@@ -46,7 +46,7 @@ class Window(QtGui.QMainWindow):
         # TODO: make this faster
         self.mem_table = MemoryTable(65536, 5)
 
-        self.reg_table = RegisterTable(4, 3)
+        self.reg_table = RegisterTable(4, 7)
         self.search_bar = SearchBar(self.mem_table)
         self.buttons = ButtonRow(self)
 
@@ -181,9 +181,8 @@ class Window(QtGui.QMainWindow):
             if 0x514 <= address <= 0xFA00:          # If address is not in OS segment of memory, clear it to 0
                 self.mem_table.clearData(address)
             else:                                   # Else set it to the correct OS data
-                self.mem_table.setDataRange(address, address)
+                self.mem_table.setDataRange(address, address + 1)
         memory.reset_modified()
-        self.console.clear()
         self.console.clear()
         self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
 
@@ -345,39 +344,60 @@ class RegisterTable(QTableWidget):
         self.setRowHeight(1, 29)
         self.setRowHeight(2, 30)
         self.setRowHeight(3, 30)
-        self.setColumnWidth(0, 161)
-        self.setColumnWidth(1, 161)
-        self.setColumnWidth(2, 162)
+        self.setColumnWidth(0, 30)
+        self.setColumnWidth(1, 100)
+        self.setColumnWidth(2, 50)
+        self.setColumnWidth(3, 30)
+        self.setColumnWidth(4, 100)
+        self.setColumnWidth(5, 50)
+        self.setColumnWidth(6, 124)
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setVisible(False)
+        self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.setMouseTracking(True)
+        self.edited_location = None
+        self.cellDoubleClicked.connect(self.set_edited_location)
+        self.itemChanged.connect(self.update_internal_registers)
 
     # Set the visual data to be the same as the underlying registers
     def setData(self):
-        reg_num0 = 0
-        reg_num1 = 4
-        index = 0
-
         # This basically just makes sure the registers go from 0 to 7 down the columns
-        # TODO: make this less weird
         for row in range(self.rowCount()):
             for col in range(self.columnCount()):
-                if index % 3 < 2:
-                    if index % 3 == 0:
-                        reg_info = 'R' + str(reg_num0) + '      ' + to_hex_string(
-                            registers[reg_num0]) + '     ' + str(registers[reg_num0])
-                        reg_num0 += 1
-                    else:
-                        reg_info = 'R' + str(reg_num1) + '      ' + to_hex_string(
-                            registers[reg_num1]) + '     ' + str(registers[reg_num1])
-                        reg_num1 += 1
-                    self.setItem(row, col, QTableWidgetItem(QString(reg_info)))
-                index += 1
+                reg_num = col + row
+                if col % 3 == 0:
+                    self.setItem(row, col, QTableWidgetItem(QString('R' + str(reg_num))))
+                    self.item(row, col).setBackground(default_color)
+                if col % 3 == 1:
+                    self.setItem(row, col, QTableWidgetItem(QString(to_hex_string(registers[reg_num - 1]))))
+                if col % 3 == 2:
+                    self.setItem(row, col, QTableWidgetItem(QString(str(registers[reg_num - 2]))))
 
         # Manually set the rest of the register info
-        self.setItem(0, 2, QTableWidgetItem(QString('PC        ' + to_hex_string(registers.PC))))
-        self.setItem(1, 2, QTableWidgetItem(QString('IR         ' + to_hex_string(registers.IR))))
-        self.setItem(2, 2, QTableWidgetItem(QString('PSR      ' + to_hex_string(registers.PSR))))
-        self.setItem(3, 2, QTableWidgetItem(QString('CC        ' + '{:03b}'.format(registers.CC))))
+        self.setItem(0, 6, QTableWidgetItem(QString('PC        ' + to_hex_string(registers.PC))))
+        self.setItem(1, 6, QTableWidgetItem(QString('IR         ' + to_hex_string(registers.IR))))
+        self.setItem(2, 6, QTableWidgetItem(QString('PSR      ' + to_hex_string(registers.PSR))))
+        self.setItem(3, 6, QTableWidgetItem(QString('CC        ' + '{:03b}'.format(registers.CC))))
+
+    def set_edited_location(self):
+        self.edited_location = self.selectedIndexes()[0]
+
+    def update_internal_registers(self):
+        if self.edited_location is not None:
+            row = self.edited_location.row()
+            column = self.edited_location.column()
+            register = row + column
+            self.edited_location = None
+            if column % 3 == 2:
+                register -= 2                        # We must subtract 2 b/c the column + row combo will be off by 2 here
+                dec_string = str(self.item(row, column).text())
+                reg_val = int(dec_string, 10)
+                reg_hex = to_hex_string(reg_val)
+
+                self.setItem(row, column - 1, QTableWidgetItem(QString(reg_hex)))
+                registers.registers[register] = reg_val  # Convert bit string at address to instruction
+
+
 
 # Class for the memory table GUI element
 class MemoryTable(QTableWidget):
@@ -392,6 +412,10 @@ class MemoryTable(QTableWidget):
         self.verticalHeader().setVisible(False)
         self.horizontalHeader().setVisible(False)
         self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.setMouseTracking(True)
+        self.edited_location = None
+        self.cellDoubleClicked.connect(self.set_edited_location)
+        self.itemChanged.connect(self.update_internal_memory)
 
     # Same as register setData, although there might be a way to make this faster
     def setData(self):
@@ -435,10 +459,30 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
     def clearData(self, address):
-        self.setItem(address, 1, QTableWidgetItem(QString("x0000")))
+        self.setItem(address, 1, QTableWidgetItem(QString(to_hex_string(address))))
         self.setItem(address, 2, QTableWidgetItem(QString("0"*16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
         self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
+
+    def set_edited_location(self):
+        self.edited_location = self.selectedIndexes()[0]
+
+    def update_internal_memory(self):
+        if self.edited_location is not None:
+            address = self.edited_location.row()
+            column = self.edited_location.column()
+            self.edited_location = None
+            if address and column == 2:
+                bit_string = str(self.item(address, 2).text())
+                inst = int(bit_string, 2)
+                inst_hex = to_hex_string(inst)
+                inst_list = parser.parse_any(inst)
+
+                self.setItem(address, 3, QTableWidgetItem(QString(inst_hex)))
+                self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                memory[address] = inst  # Convert bit string at address to instruction
+
+
 
 # Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
