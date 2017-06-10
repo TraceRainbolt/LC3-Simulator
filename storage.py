@@ -49,6 +49,7 @@ class Memory(object):
         self.memory = np.empty(nrow, dtype='int16')
         self.paused = False
         self.modified_data = []
+        self.breakpoints = []
         self.instructions_ran = 0
 
     def __getitem__(self, position):
@@ -69,6 +70,7 @@ class Memory(object):
 
     # Loads LC3 Operating System from text file
     def load_os(self):
+        self.breakpoints = []
         fname = "LC3_OS.bin"
         with open(fname) as f:
             for irow, line in enumerate(f):

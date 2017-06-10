@@ -54,7 +54,7 @@ def run_instructions(console):
         if not ON and registers.PC == sign_extend(0xFD79, 16):
             memory[MCR] = 0x7FFF
             break
-        if memory.paused:
+        if memory.paused or (registers.PC & 0xFFFF) in memory.breakpoints:
             break
     memory.paused = False
     update_gui_registers(console)
@@ -123,7 +123,8 @@ def handle_KBSR(console):
 
 def handle_update_gui_memory(console, changed):
     QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_memory', Qt.DirectConnection,
-                                    QtCore.Q_ARG(int, changed))
+
+                                   QtCore.Q_ARG(int, changed))
 
 #
 # HANDLERS: THe following functions handle

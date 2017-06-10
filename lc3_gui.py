@@ -24,8 +24,8 @@ default_origin = 0x3000
 bit_mask = 0xFFFF  # bit mask to 'convert' signed int to unsigned, 0xFFFF = 16 bit
 
 pc_color = QtGui.QColor(10, 206, 101)
+breakpoint_color = QtGui.QColor(249, 14, 69)
 default_color = QtGui.QColor(240, 240, 240)
-
 
 class Window(QtGui.QMainWindow):
     def __init__(self):
@@ -181,6 +181,9 @@ class Window(QtGui.QMainWindow):
         registers.CC = 0b010
         registers.PSR = 0x8000 + registers.CC
         self.reg_table.setData()
+
+        for row in memory.breakpoints:
+            self.mem_table.item(row, 0).setBackground(default_color)
 
         memory.load_os()
         for address in memory.modified_data:
@@ -468,6 +471,7 @@ class MemoryTable(QTableWidget):
         self.edited_location = None
         self.cellDoubleClicked.connect(self.set_edited_location)
         self.itemChanged.connect(self.update_internal_memory)
+        self.doubleClicked.connect(self.set_breakpoint)
 
     # Same as register setData, although there might be a way to make this faster
     def setData(self):
@@ -522,7 +526,8 @@ class MemoryTable(QTableWidget):
         self.item(address, 4).setFlags(QtCore.Qt.ItemIsEnabled)
 
     def set_edited_location(self):
-        self.edited_location = self.selectedIndexes()[0]
+        if self.selectedIndexes():
+            self.edited_location = self.selectedIndexes()[0]
 
     def update_internal_memory(self):
         if self.edited_location is not None:
@@ -547,6 +552,10 @@ class MemoryTable(QTableWidget):
                 self.setItem(address, 2, QTableWidgetItem(QString(inst_bin)))
                 self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
                 memory[address] = inst  # Convert bit string at address to instruction
+
+    def set_breakpoint(self, cell):
+        self.item(cell.row(), cell.column()).setBackground(breakpoint_color)
+        memory.breakpoints.append(cell.row())
 
 
 # Class for the file dialog
