@@ -157,6 +157,10 @@ class Window(QtGui.QMainWindow):
     @QtCore.pyqtSlot()
     def update_gui_tables(self):
         self.reg_table.setData()
+        KBDR_gui = KBDR & bit_mask
+        KBSR_gui = KBSR & bit_mask
+        self.mem_table.setDataRange(KBDR_gui, KBDR_gui + 1)
+        self.mem_table.setDataRange(KBSR_gui, KBSR_gui + 1)
 
     # Slot for receiving memory updates
     @QtCore.pyqtSlot(int)
@@ -265,16 +269,17 @@ class Console(QTextEdit):
         self.main = main
 
     # Override default keyPressEvent, update machine with correct information
-    # TODO: enable keyboard interrupts, should be easy now that this is its own thread
     def keyPressEvent(self, event):
-        if isinstance(event, QtGui.QKeyEvent):
+        if isinstance(event, QtGui.QKeyEvent) and memory[KBSR] >> 15 == 0:
             key = ord(str(event.text()))
             memory[KBSR] = memory[KBSR] + 0x8000  # Set first bit of KBSR to 1, rest 0
             if key == 0x0D:
                 key = 0x0A
             memory[KBDR] = key  # Put key in KBDR
+            memory.keyboard_enabled = False
             if (memory[KBSR] >> 14) & 1 == 1:
                 self.initiate_service_routine(self.main, 0x80)
+
         QTextEdit.keyPressEvent(self, event)
 
     @staticmethod
@@ -292,6 +297,9 @@ class Console(QTextEdit):
         SSP = registers.registers[6]  # Set SSP again
         memory[SSP] = old_PC  # Place PC on top of Supervisor Stack
         registers.PC = memory[vector + 0x100] - 1  # Jump to interrupt vector table location (always 0x0180)
+        changed = SSP & bit_mask
+        self.main.mem_table.setDataRange(changed - 2, changed)
+        self.main.reg_table.setData()
 
 
 # Class for RunHandler, which handles all connections from GUI to logic
@@ -324,10 +332,24 @@ class RunHandler(QtCore.QObject):
         row = registers.PC & bit_mask
         self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
-        # TODO: make this work better (have it depend on where you are)
-        if registers.PC & bit_mask - row > 16 or registers.PC & bit_mask - row < -8:
+
+        if self.pc_out_of_view(self.main.mem_table, row):
             self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
+
+    @staticmethod
+    def pc_out_of_view(mem_table, row):
+        rect = mem_table.viewport().contentsRect()
+        top = mem_table.indexAt(rect.topLeft())
+        if top.isValid():
+            bottom = mem_table.indexAt(rect.bottomLeft())
+        if not bottom.isValid():
+            bottom = mem_table.model().index(mem_table.count() - 1)
+        for visible_row in range(top.row(), bottom.row()):
+            if visible_row == row:
+                return False
+        return True
+
 
     # Slot for ending the current instruction run and closing the thread
     @QtCore.pyqtSlot()
@@ -477,6 +499,7 @@ class MemoryTable(QTableWidget):
     def setData(self):
         for row in range(self.rowCount()):
             self.setItem(row, 0, QtGui.QTableWidgetItem())
+            self.item(row, 0).setFlags(QtCore.Qt.ItemIsSelectable)
             if 0x514 <= row <= 0xFA00:
                 self.clearData(row)
             else:
@@ -495,7 +518,7 @@ class MemoryTable(QTableWidget):
             self.item(row, 0).setBackground(default_color)
             if row == registers.PC:
                 self.item(row, 0).setBackground(pc_color)
-            self.item(row, 0).setFlags(QtCore.Qt.ItemIsEnabled)
+            self.item(row, 0).setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
 
     # Used when we know the range of the data to update, so that we don't have to update the entire table
     def setDataRange(self, start, stop):
@@ -517,7 +540,7 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
 
     def clearData(self, address):
-        self.item(address, 0).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.item(address, 0).setFlags(QtCore.Qt.ItemIsSelectable)
         self.setItem(address, 1, QTableWidgetItem(QString(to_hex_string(address))))
         self.item(address, 1).setFlags(QtCore.Qt.ItemIsEnabled)
         self.setItem(address, 2, QTableWidgetItem(QString("0" * 16)))
@@ -554,8 +577,13 @@ class MemoryTable(QTableWidget):
                 memory[address] = inst  # Convert bit string at address to instruction
 
     def set_breakpoint(self, cell):
-        self.item(cell.row(), cell.column()).setBackground(breakpoint_color)
-        memory.breakpoints.append(cell.row())
+        if cell.row() & bit_mask not in memory.breakpoints:
+            self.item(cell.row(), cell.column()).setBackground(breakpoint_color)
+            memory.breakpoints.append(cell.row())
+        else:
+            memory.breakpoints.remove(cell.row() & bit_mask)
+            self.item(cell.row(), cell.column()).setBackground(default_color)
+        self.clearSelection()
 
 
 # Class for the file dialog

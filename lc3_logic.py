@@ -25,6 +25,7 @@ bit_mask = 0xFFFF
 # Location of OS file
 os_file_name = "LC3_OS.bin"
 
+
 # Main function, initializes memory and starts running instructions
 def main():
     memory.load_os()
@@ -33,6 +34,7 @@ def main():
     memory[KBSR] = 0x4000
     create_UI()
 
+
 def create_UI():
     app = QtGui.QApplication(sys.argv)
     app.setStyle("plastique")
@@ -40,9 +42,11 @@ def create_UI():
     GUI.show()
     sys.exit(app.exec_())
 
+
 # Updates the register table to display to the UI
 def update_gui_registers(console):
     QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_tables', Qt.DirectConnection)
+
 
 # Handles basics for running instructions
 def run_instructions(console):
@@ -54,7 +58,10 @@ def run_instructions(console):
         if not ON and registers.PC == sign_extend(0xFD79, 16):
             memory[MCR] = 0x7FFF
             break
-        if memory.paused or (registers.PC & 0xFFFF) in memory.breakpoints:
+        if (registers.PC & 0xFFFF) in memory.breakpoints:
+            memory.breakpoints.remove((registers.PC & 0xFFFF))
+            break
+        if memory.paused:
             break
     memory.paused = False
     update_gui_registers(console)
@@ -108,6 +115,7 @@ def handle_instruction(inst, console):
     elif str_op == 'TRAP':
         handle_trap(inst)
 
+
 # Handle the Display Data Register, called when updated
 def handle_DDR(console):
     if (memory[DSR] >> 15) & 0b1 == 1:
@@ -120,11 +128,13 @@ def handle_DDR(console):
 def handle_KBSR(console):
     if (memory[KBSR] >> 15) & 1 == 1:
         memory[KBSR] = memory[KBSR] & 0x4000  # Reset KBSR
+        handle_update_gui_memory(console, KBSR)
+
 
 def handle_update_gui_memory(console, changed):
     QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_memory', Qt.DirectConnection,
+                                    QtCore.Q_ARG(int, changed))
 
-                                   QtCore.Q_ARG(int, changed))
 
 #
 # HANDLERS: THe following functions handle
@@ -290,6 +300,7 @@ def handle_rti(inst):
     else:
         print "Privilege mode exception."
 
+
 def handle_trap(inst):
     global ON
     registers.registers[7] = registers.PC
@@ -309,6 +320,7 @@ def sign_extend(val, bits):
 # Used to print hex values in proper format
 def to_hex_string(val):
     return 'x' + '{:04x}'.format((val + (1 << 16)) % (1 << 16)).upper()
+
 
 # Used to print bin values in proper format
 def to_bin_string(val):

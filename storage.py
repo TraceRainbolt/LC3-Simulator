@@ -51,6 +51,7 @@ class Memory(object):
         self.modified_data = []
         self.breakpoints = []
         self.instructions_ran = 0
+        self.keyboard_enabled = True
 
     def __getitem__(self, position):
         return self.memory[position]
