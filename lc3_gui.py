@@ -161,7 +161,8 @@ class Window(QtGui.QMainWindow):
     # Slot for receiving memory updates
     @QtCore.pyqtSlot(int)
     def update_memory_table(self, changed):
-        self.mem_table.setDataRange(changed, changed + 1)
+        if self.mem_table.item(changed, 0) is not None:
+            self.mem_table.setDataRange(changed, changed + 1)
 
     # Open the file dialog to select program to load
     def load_program(self):
@@ -380,16 +381,18 @@ class RegisterTable(QTableWidget):
     def setData(self):
         # This basically just makes sure the registers go from 0 to 7 down the columns
         for row in range(self.rowCount()):
-            for col in range(self.columnCount() - 1):  # Subtract 1 to work with easier numbers
-                reg_num = col + row
+            reg_num = row
+            for col in range(self.columnCount() - 2):  # Subtract 2 so we don't iterate over the special registers
+                if col == 3:
+                    reg_num = row + 4
                 if col % 3 == 0:
                     self.setItem(row, col, QTableWidgetItem(QString('R' + str(reg_num))))
                     self.item(row, col).setBackground(default_color)
                     self.item(row, col).setFlags(QtCore.Qt.ItemIsEnabled)
                 if col % 3 == 1:
-                    self.setItem(row, col, QTableWidgetItem(QString(to_hex_string(registers[reg_num - 1]))))
+                    self.setItem(row, col, QTableWidgetItem(QString(to_hex_string(registers[reg_num]))))
                 if col % 3 == 2:
-                    self.setItem(row, col, QTableWidgetItem(QString(str(registers[reg_num - 2]))))
+                    self.setItem(row, col, QTableWidgetItem(QString(str(registers[reg_num]))))
 
         # Manually set the rest of the register info
         self.setItem(0, 6, QTableWidgetItem(QString('PC')))
