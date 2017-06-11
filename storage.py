@@ -24,7 +24,6 @@ class Registers(object):
         self.PC = origin
 
     def set_CC(self, value):
-        self.PSR = (self.PSR & 0xFFF8) + self.CC
         if value < 0:
             self.CC = 0b100
         elif value == 0:
@@ -33,6 +32,7 @@ class Registers(object):
             self.CC = 0b001
         else:
             print "Invalid CC state entered."
+        self.PSR = (self.PSR & 0xFFF8) + self.CC
 
     def print_registers(self):
         for i, register in enumerate(self.registers):
