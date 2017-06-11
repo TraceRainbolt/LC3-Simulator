@@ -1,6 +1,9 @@
 import numpy as np
 import binascii as ba
 
+nrow = 65536
+
+
 # Register class for registers, PC, IR, and CC
 class Registers(object):
     def __init__(self, registers, PC, IR, CC):
@@ -44,14 +47,12 @@ class Registers(object):
 
 # Memory class: 0xFFFF memory locations, containing a singed 16 bit number
 class Memory(object):
-    def __init__(self, memory=None):
-        nrow = 65536
-        self.memory = np.empty(nrow, dtype='int16')
+    def __init__(self, mem=np.empty(nrow, dtype='int16')):
+        self.memory = mem
         self.paused = False
         self.modified_data = []
         self.breakpoints = []
         self.instructions_ran = 0
-        self.keyboard_enabled = True
 
     def __getitem__(self, position):
         return self.memory[position]
@@ -87,11 +88,13 @@ class Memory(object):
 # Parse .obj files
 def parse_obj(fname):
     chars = []
-    with open(fname) as f:
+    count = 0
+    with open(fname, "rb") as f:
         for line in f:
             for char in line:
                 chars.append('{:08b}'.format(int(ba.hexlify(char), 16)))
     combined_chars = []
+    print count
     j = 0
     while j + 1 < len(chars):
         char1 = chars[j]
