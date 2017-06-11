@@ -135,7 +135,6 @@ def handle_update_gui_memory(console, changed):
     QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_memory', Qt.DirectConnection,
                                     QtCore.Q_ARG(int, changed))
 
-
 #
 # HANDLERS: THe following functions handle
 # their respective instructions

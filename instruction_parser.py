@@ -6,40 +6,84 @@
 def parse_any(inst):
     opcode = inst >> 12
     str_op = parse_op(opcode)
-
+    ret = []
     if str_op == 'ADD':
-        return parse_add(inst)
+        ret = parse_add(inst)
+        ret[1] = 'R' + str(ret[1])
+        ret[2] = 'R' + str(ret[2])
+        if ret.pop(3) == 1:  # Immediate value
+            ret[3] = '#' + str(ret[3])
+        else:
+            ret[3]= 'R' + str(ret[3])
     elif str_op == 'NOT':
-        return parse_not(inst)
+        ret = parse_not(inst)
+        print ret
+        ret[1] = 'R' + str(ret[1])
+        ret[2] = 'R' + str(ret[2])
     elif str_op == 'AND':
-        return parse_and(inst)
+        ret = parse_and(inst)
+        ret[1] = 'R' + str(ret[1])
+        ret[2] = 'R' + str(ret[2])
+        if ret.pop(3) == 1:  # Immediate value
+            ret[3] = '#' + str(ret[3])
+        else:
+            ret[3]= 'R' + str(ret[3])
     elif str_op == 'LD':
-        return parse_ld(inst)
+        ret = parse_ld(inst)
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'LDI':
-        return parse_ldi(inst)
+        ret = parse_ldi(inst)
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'LDR':
-        return parse_ldr(inst)
+        ret = parse_ldr(inst)
+        ret[1] = 'R' + str(ret[1])
+        ret[2] = 'R' + str(ret[2])
     elif str_op == 'LEA':
-        return parse_lea(inst)
+        ret = parse_lea(inst)
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'ST':
-        return parse_st(inst)
+        ret = parse_st(inst)
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'STI':
-        return parse_sti(inst)
+        ret = parse_sti(inst)
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'STR':
-        return parse_str(inst)
+        ret = parse_str(inst)
+        ret[1] = 'R' + str(ret[1])
+        ret[2] = 'R' + str(ret[2])
     elif str_op == 'BR':
         ret = parse_br(inst)
         if ret[1] == 0 and ret[2] == 0:
             return ['NOP']
-        return ret
+        val = ret.pop(1)
+        cc = '{:03b}'.format(val)
+        if val == 0:
+            ret = ['    ' + chr(inst) + '       #' + str(inst)]
+            return ret
+        for i, n in enumerate(cc):
+            if n == '1':
+                if i == 0:
+                    ret[0] += 'n'
+                elif i == 1:
+                    ret[0] += 'z'
+                elif i == 2:
+                    ret[0] += 'p'
     elif str_op == 'JSR':
-        return parse_jsr(inst)
+        ret = parse_jsr(inst)
+        val = ret.pop(1)
+        if val == 0:
+            ret[1] = 'R' + str(ret[1])
     elif str_op == 'RET':
-        return parse_ret(inst)
+        ret = parse_ret(inst)
+        if ret[1] == 7:
+            return ['RET']
+        ret[1] = 'R' + str(ret[1])
     elif str_op == 'RTI':
-        return parse_rti(inst)
+        ret = parse_rti(inst)
     elif str_op == 'TRAP':
-        return parse_trap(inst)
+        ret = parse_trap(inst)
+        ret[1] = hex(ret[1])[1:]
+    return ret
 
 def parse_add(inst):
     DR = get_DR(inst)

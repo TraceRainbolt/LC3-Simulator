@@ -270,6 +270,10 @@ class Console(QTextEdit):
 
     # Override default keyPressEvent, update machine with correct information
     def keyPressEvent(self, event):
+        self.handle_input(event)
+        QTextEdit.keyPressEvent(self, event)
+
+    def handle_input(self, event):
         if isinstance(event, QtGui.QKeyEvent) and memory[KBSR] >> 15 == 0:
             key = ord(str(event.text()))
             memory[KBSR] = memory[KBSR] + 0x8000  # Set first bit of KBSR to 1, rest 0
@@ -280,7 +284,6 @@ class Console(QTextEdit):
             if (memory[KBSR] >> 14) & 1 == 1:
                 self.initiate_service_routine(self.main, 0x80)
 
-        QTextEdit.keyPressEvent(self, event)
 
     @staticmethod
     def initiate_service_routine(main, vector):
@@ -511,8 +514,7 @@ class MemoryTable(QTableWidget):
                 self.item(row, 1).setFlags(QtCore.Qt.ItemIsEnabled)
                 self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
                 self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
-                inst_list = parser.parse_any(inst)
-                self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                self.set_info_column(row, inst)
                 self.item(row, 4).setFlags(QtCore.Qt.ItemIsEnabled)
 
             self.item(row, 0).setBackground(default_color)
@@ -536,8 +538,7 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
             self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
-            inst_list = parser.parse_any(inst)
-            self.setItem(row, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+            self.set_info_column(row, inst)
 
     def clearData(self, address):
         self.item(address, 0).setFlags(QtCore.Qt.ItemIsSelectable)
@@ -561,10 +562,10 @@ class MemoryTable(QTableWidget):
                 bit_string = str(self.item(address, 2).text())
                 inst = int(bit_string, 2)
                 inst_hex = to_hex_string(inst)
-                inst_list = parser.parse_any(inst)
 
                 self.setItem(address, 3, QTableWidgetItem(QString(inst_hex)))
-                self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                self.set_info_column(address, inst)
+
                 memory[address] = inst  # Convert bit string at address to instruction
             if address and column == 3:
                 hex_string = str(self.item(address, 3).text()[1:])
@@ -573,10 +574,12 @@ class MemoryTable(QTableWidget):
                 inst_list = parser.parse_any(inst)
 
                 self.setItem(address, 2, QTableWidgetItem(QString(inst_bin)))
-                self.setItem(address, 4, QTableWidgetItem(QString(', '.join(str(e) for e in inst_list))))
+                set_info_column(address, inst)
                 memory[address] = inst  # Convert bit string at address to instruction
 
     def set_breakpoint(self, cell):
+        if cell.column() !=  0:
+            return
         if cell.row() & bit_mask not in memory.breakpoints:
             self.item(cell.row(), cell.column()).setBackground(breakpoint_color)
             memory.breakpoints.append(cell.row())
@@ -584,6 +587,13 @@ class MemoryTable(QTableWidget):
             memory.breakpoints.remove(cell.row() & bit_mask)
             self.item(cell.row(), cell.column()).setBackground(default_color)
         self.clearSelection()
+
+    def set_info_column(self, address, inst):
+        inst_list = parser.parse_any(inst)
+        if np.issubdtype(type(inst_list[-1]), int):
+            inst_list[-1] = to_hex_string(inst_list[-1] + address + 1)
+        self.setItem(address, 4,
+                     QTableWidgetItem(QString(str(inst_list.pop(0)) + ' ' + ', '.join(str(e) for e in inst_list))))
 
 
 # Class for the file dialog
