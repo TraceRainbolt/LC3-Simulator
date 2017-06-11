@@ -17,7 +17,6 @@ def parse_any(inst):
             ret[3]= 'R' + str(ret[3])
     elif str_op == 'NOT':
         ret = parse_not(inst)
-        print ret
         ret[1] = 'R' + str(ret[1])
         ret[2] = 'R' + str(ret[2])
     elif str_op == 'AND':
@@ -38,6 +37,7 @@ def parse_any(inst):
         ret = parse_ldr(inst)
         ret[1] = 'R' + str(ret[1])
         ret[2] = 'R' + str(ret[2])
+        ret[3] = '#' + str(ret[3])
     elif str_op == 'LEA':
         ret = parse_lea(inst)
         ret[1] = 'R' + str(ret[1])
@@ -51,6 +51,7 @@ def parse_any(inst):
         ret = parse_str(inst)
         ret[1] = 'R' + str(ret[1])
         ret[2] = 'R' + str(ret[2])
+        ret[3] = '#' + str(ret[3])
     elif str_op == 'BR':
         ret = parse_br(inst)
         if ret[1] == 0 and ret[2] == 0:

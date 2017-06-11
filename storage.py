@@ -88,13 +88,11 @@ class Memory(object):
 # Parse .obj files
 def parse_obj(fname):
     chars = []
-    count = 0
     with open(fname, "rb") as f:
         for line in f:
             for char in line:
                 chars.append('{:08b}'.format(int(ba.hexlify(char), 16)))
     combined_chars = []
-    print count
     j = 0
     while j + 1 < len(chars):
         char1 = chars[j]

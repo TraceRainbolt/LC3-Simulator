@@ -32,7 +32,7 @@ class Window(QtGui.QMainWindow):
         super(Window, self).__init__()
         self.thread = QtCore.QThread()
         self.file_dialog = FileDialog()
-        self.setGeometry(100, 100, 1033, 950)
+        self.setGeometry(100, 100, 1100, 950)
         self.setWindowTitle("LC3 Simulator")
         self.setWindowIcon(QtGui.QIcon('LC3_logo.png'))
         self.setupFileMenu()
@@ -41,10 +41,11 @@ class Window(QtGui.QMainWindow):
         # self.speed_slider = SpeedSlider(self)
         self.worker = RunHandler(self)
         self.modified_data = []
+        self.labeled_addresses = {}
 
         self.mem_table = None
         # TODO: make this faster
-        self.mem_table = MemoryTable(65536, 5)
+        self.mem_table = MemoryTable(65536, 6)
 
         self.reg_table = RegisterTable(4, 8)
         self.search_bar = SearchBar(self.mem_table)
@@ -333,11 +334,11 @@ class RunHandler(QtCore.QObject):
     # Step through the code
     def step_app(self):
         row = registers.PC & bit_mask
+        if self.pc_out_of_view(self.main.mem_table, row):
+            self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
 
-        if self.pc_out_of_view(self.main.mem_table, row):
-            self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.emit_done()
 
     @staticmethod
@@ -485,8 +486,9 @@ class MemoryTable(QTableWidget):
         self.setColumnWidth(0, 40)
         self.setColumnWidth(1, 50)
         self.setColumnWidth(2, 163)
-        self.setColumnWidth(3, 70)
-        self.setColumnWidth(4, 140)
+        self.setColumnWidth(3, 60)
+        self.setColumnWidth(4, 60)
+        self.setColumnWidth(5, 140)
         self.verticalHeader().setVisible(False)
         header = self.horizontalHeader()
         header.setVisible(False)
@@ -496,7 +498,8 @@ class MemoryTable(QTableWidget):
         self.edited_location = None
         self.cellDoubleClicked.connect(self.set_edited_location)
         self.itemChanged.connect(self.update_internal_memory)
-        self.doubleClicked.connect(self.set_breakpoint)
+        self.doubleClicked.connect(self.handle_double_click)
+        self.labels = None
 
     # Same as register setData, although there might be a way to make this faster
     def setData(self):
@@ -515,7 +518,7 @@ class MemoryTable(QTableWidget):
                 self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
                 self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
                 self.set_info_column(row, inst)
-                self.item(row, 4).setFlags(QtCore.Qt.ItemIsEnabled)
+                self.item(row, 5).setFlags(QtCore.Qt.ItemIsEnabled)
 
             self.item(row, 0).setBackground(default_color)
             if row == registers.PC:
@@ -523,7 +526,8 @@ class MemoryTable(QTableWidget):
             self.item(row, 0).setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
 
     # Used when we know the range of the data to update, so that we don't have to update the entire table
-    def setDataRange(self, start, stop):
+    def setDataRange(self, start, stop, labels={}):
+        self.labels = labels
         for row in range(start, stop, 1):
             inst = memory.memory[row]
             inst_bin = to_bin_string(inst)
@@ -538,7 +542,7 @@ class MemoryTable(QTableWidget):
             self.setItem(row, 1, QTableWidgetItem(QString(to_hex_string(row))))
             self.setItem(row, 2, QTableWidgetItem(QString(inst_bin)))
             self.setItem(row, 3, QTableWidgetItem(QString(inst_hex)))
-            self.set_info_column(row, inst)
+            self.set_info_column(row, inst, labels)
 
     def clearData(self, address):
         self.item(address, 0).setFlags(QtCore.Qt.ItemIsSelectable)
@@ -546,8 +550,8 @@ class MemoryTable(QTableWidget):
         self.item(address, 1).setFlags(QtCore.Qt.ItemIsEnabled)
         self.setItem(address, 2, QTableWidgetItem(QString("0" * 16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
-        self.setItem(address, 4, QTableWidgetItem(QString("NOP")))
-        self.item(address, 4).setFlags(QtCore.Qt.ItemIsEnabled)
+        self.setItem(address, 5, QTableWidgetItem(QString("NOP")))
+        self.item(address, 5).setFlags(QtCore.Qt.ItemIsEnabled)
 
     def set_edited_location(self):
         if self.selectedIndexes():
@@ -577,9 +581,13 @@ class MemoryTable(QTableWidget):
                 set_info_column(address, inst)
                 memory[address] = inst  # Convert bit string at address to instruction
 
+    def handle_double_click(self, cell):
+        if cell.column() == 0:
+            self.set_breakpoint(cell)
+        elif cell.column() == 5:
+            pass
+
     def set_breakpoint(self, cell):
-        if cell.column() !=  0:
-            return
         if cell.row() & bit_mask not in memory.breakpoints:
             self.item(cell.row(), cell.column()).setBackground(breakpoint_color)
             memory.breakpoints.append(cell.row())
@@ -588,22 +596,33 @@ class MemoryTable(QTableWidget):
             self.item(cell.row(), cell.column()).setBackground(default_color)
         self.clearSelection()
 
-    def set_info_column(self, address, inst):
+    def set_info_column(self, address, inst, labels=[]):
         inst_list = parser.parse_any(inst)
         if np.issubdtype(type(inst_list[-1]), int):
-            inst_list[-1] = to_hex_string(inst_list[-1] + address + 1)
-        self.setItem(address, 4,
+            final_address = (inst_list[-1] + address & bit_mask) + 1
+            if final_address & bit_mask in labels:
+                final_address = labels[final_address & bit_mask]
+                inst_list[-1] = final_address
+            else:
+                inst_list[-1] = to_hex_string(final_address)
+        self.setItem(address, 5,
                      QTableWidgetItem(QString(str(inst_list.pop(0)) + ' ' + ', '.join(str(e) for e in inst_list))))
+        self.item(address, 5).setFlags(QtCore.Qt.ItemIsEnabled)
+
 
 
 # Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
+    def __init__(self, *args):
+        QtGui.QFileDialog.__init__(self, *args)
+        self.main = None
+        self.labeled_addresses = {}
+
     def file_open(self, main):
+        self.main = main
         self.setNameFilters(["OBJ Files (*.obj)"])
         self.selectNameFilter("OBJ Files (*.obj)")
         file_names = self.getOpenFileNames(self, "Open files")
-
-        # main.mem_table.setItem(registers.PC, 0, QtGui.QTableWidgetItem())
 
         found_default = False
 
@@ -612,13 +631,17 @@ class FileDialog(QtGui.QFileDialog):
         main.mem_table.item(registers.PC, 0).setBackground(default_color)
 
         for name in file_names:
+            self.check_symbol_table(name)
+
+        for name in file_names:
             interval = memory.load_instructions(name)
             if interval[0] == default_origin:
                 found_default = True
             # Interval that we updated, used so that load times are faster
-            main.mem_table.setDataRange(interval[0], interval[1])
+            main.mem_table.setDataRange(interval[0], interval[1], self.labeled_addresses)
             main.mem_table.verticalScrollBar().setValue(interval[0])
             main.modified_data.append(interval)
+
 
         # In place so that the default_origin (probably 0x3000) is used instead of most recent
         # Only used if at least 1 file is found to start at default_origin
@@ -627,6 +650,26 @@ class FileDialog(QtGui.QFileDialog):
             registers.set_origin(default_origin)
             main.mem_table.item(registers.PC, 0).setBackground(pc_color)
             main.mem_table.verticalScrollBar().setValue(default_origin)
+
+    # TODO: fix this monstrosity (i.e. don't use 7 levels of statements)
+    def check_symbol_table(self, name):
+        base_name = name[:-4]
+        try:
+            with open(base_name + ".sym") as f:
+                for i, line in enumerate(f):
+                    if i > 1:
+                        label = ''
+                        for j, char in enumerate(line):
+                            if j > 2:
+                                if char == " ":
+                                    break
+                                label += char
+                        address = line[-5:-1]
+                        self.main.mem_table.setItem(int(address, 16), 4, QTableWidgetItem(QString(label)))
+                        self.labeled_addresses[int(address, 16)] = label
+
+        except IOError:
+            return  # It's fine, just no labels for them
 
 
 # Class for the search bar
