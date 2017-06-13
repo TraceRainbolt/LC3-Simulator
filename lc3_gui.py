@@ -13,6 +13,8 @@ import instruction_parser as parser
 from storage import Registers
 from storage import *
 
+from queue import *
+
 KBSR = -512  # 0xFE00
 KBDR = -510  # 0xFE02
 DSR = -508  # 0xFE04
@@ -26,6 +28,8 @@ bit_mask = 0xFFFF  # bit mask to 'convert' signed int to unsigned, 0xFFFF = 16 b
 pc_color = QtGui.QColor(10, 206, 101)
 breakpoint_color = QtGui.QColor(249, 14, 69)
 default_color = QtGui.QColor(240, 240, 240)
+
+key_queue = Queue(maxsize=100)
 
 class Window(QtGui.QMainWindow):
     def __init__(self):
@@ -57,7 +61,7 @@ class Window(QtGui.QMainWindow):
 
         self.home()
 
-        self.reinitialize_machine()
+        self.reinitialize_machine(True)
 
     def __del__(self):
         # Restore sys.stdout
@@ -77,7 +81,7 @@ class Window(QtGui.QMainWindow):
 
         self.right_grid.setRowStretch(0, 2)
         self.right_grid.setRowStretch(1, 1)
-        self.right_grid.setRowStretch(2, 11)
+        self.right_grid.setRowStretch(2, 12)
 
         rightWidget.setLayout(self.right_grid)
         leftWidget.setLayout(self.left_grid)
@@ -178,7 +182,9 @@ class Window(QtGui.QMainWindow):
         self.console.clear()
 
     # Reinitialize machine
-    def reinitialize_machine(self):
+    def reinitialize_machine(self, first_time=False):
+        if not first_time:  # Initial time should not suspend process
+            self.suspend_process()
         for i, register in enumerate(registers):
             registers[i] = 0
         self.set_pc(0x3000)
@@ -197,6 +203,7 @@ class Window(QtGui.QMainWindow):
             else:  # Else set it to the correct OS data
                 self.mem_table.setDataRange(address, address + 1)
         memory.reset_modified()
+        memory.key_queue = Queue(maxsize=100)
         self.console.clear()
         self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
 
@@ -249,9 +256,12 @@ class Window(QtGui.QMainWindow):
         self.worker.update_memory.connect(self.update_memory_table)
         self.worker.updated.connect(self.append_text)
 
-        if not step:
+        if step == 'run':
             self.thread.started.connect(self.worker.run_app)
-        else:
+        elif step == 'step':
+            self.thread.started.connect(self.worker.step_app)
+        elif step == 'over':
+            memory.stepping_over = True
             self.thread.started.connect(self.worker.step_app)
 
         self.thread.finished.connect(self.thread.quit)
@@ -275,16 +285,15 @@ class Console(QTextEdit):
         QTextEdit.keyPressEvent(self, event)
 
     def handle_input(self, event):
-        if isinstance(event, QtGui.QKeyEvent) and memory[KBSR] >> 15 == 0:
-            key = ord(str(event.text()))
-            memory[KBSR] = memory[KBSR] + 0x8000  # Set first bit of KBSR to 1, rest 0
-            if key == 0x0D:
-                key = 0x0A
-            memory[KBDR] = key  # Put key in KBDR
-            memory.keyboard_enabled = False
+        if isinstance(event, QtGui.QKeyEvent) and len(event.text()) > 0:
+            self.send_key(event.text())
             if (memory[KBSR] >> 14) & 1 == 1:
                 self.initiate_service_routine(self.main, 0x80)
 
+    @staticmethod
+    def send_key(event_txt):
+        key = ord(str(event_txt))
+        memory.key_queue.put(key, 0.01)
 
     @staticmethod
     def initiate_service_routine(main, vector):
@@ -302,8 +311,8 @@ class Console(QTextEdit):
         memory[SSP] = old_PC  # Place PC on top of Supervisor Stack
         registers.PC = memory[vector + 0x100] - 1  # Jump to interrupt vector table location (always 0x0180)
         changed = SSP & bit_mask
-        self.main.mem_table.setDataRange(changed - 2, changed)
-        self.main.reg_table.setData()
+        main.mem_table.setDataRange(changed - 2, changed)
+        main.reg_table.setData()
 
 
 # Class for RunHandler, which handles all connections from GUI to logic
@@ -353,7 +362,6 @@ class RunHandler(QtCore.QObject):
             if visible_row == row:
                 return False
         return True
-
 
     # Slot for ending the current instruction run and closing the thread
     @QtCore.pyqtSlot()
@@ -575,7 +583,6 @@ class MemoryTable(QTableWidget):
                 hex_string = str(self.item(address, 3).text()[1:])
                 inst = int(hex_string, 16)
                 inst_bin = to_bin_string(inst)
-                inst_list = parser.parse_any(inst)
 
                 self.setItem(address, 2, QTableWidgetItem(QString(inst_bin)))
                 set_info_column(address, inst)
@@ -609,8 +616,6 @@ class MemoryTable(QTableWidget):
                      QTableWidgetItem(QString(str(inst_list.pop(0)) + ' ' + ', '.join(str(e) for e in inst_list))))
         self.item(address, 5).setFlags(QtCore.Qt.ItemIsEnabled)
 
-
-
 # Class for the file dialog
 class FileDialog(QtGui.QFileDialog):
     def __init__(self, *args):
@@ -629,9 +634,12 @@ class FileDialog(QtGui.QFileDialog):
         if len(file_names) == 0:
             return
         main.mem_table.item(registers.PC, 0).setBackground(default_color)
+        memory.key_queue = Queue(maxsize=100)  # Clear key buffer
 
+        # TODO: fix
         for name in file_names:
-            self.check_symbol_table(name)
+            pass
+            # self.check_symbol_table(name)
 
         for name in file_names:
             interval = memory.load_instructions(name)
@@ -641,7 +649,6 @@ class FileDialog(QtGui.QFileDialog):
             main.mem_table.setDataRange(interval[0], interval[1], self.labeled_addresses)
             main.mem_table.verticalScrollBar().setValue(interval[0])
             main.modified_data.append(interval)
-
 
         # In place so that the default_origin (probably 0x3000) is used instead of most recent
         # Only used if at least 1 file is found to start at default_origin
@@ -697,15 +704,15 @@ class ButtonRow(QtGui.QWidget):
         self.grid = QtGui.QGridLayout()
         self.run_button = QtGui.QPushButton('Run', self)
         self.run_button.setMaximumSize(70, 120)
-        self.run_button.clicked.connect(lambda: window.run(False))
+        self.run_button.clicked.connect(lambda: window.run('run'))
 
         self.step_button = QtGui.QPushButton('Step', self)
         self.step_button.setMaximumSize(70, 120)
-        self.step_button.clicked.connect(lambda: window.run(True))
+        self.step_button.clicked.connect(lambda: window.run('step'))
 
         self.step_over_button = QtGui.QPushButton('Step Over', self)
         self.step_over_button.setMaximumSize(70, 120)
-        self.step_over_button.clicked.connect(lambda: window.run(True))
+        self.step_over_button.clicked.connect(lambda: window.run('over'))
 
         self.stop_button = QtGui.QPushButton('Stop', self)
         self.stop_button.setMaximumSize(70, 120)

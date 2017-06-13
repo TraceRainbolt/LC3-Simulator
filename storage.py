@@ -1,5 +1,6 @@
 import numpy as np
 import binascii as ba
+from queue import *
 
 nrow = 65536
 
@@ -53,6 +54,8 @@ class Memory(object):
         self.modified_data = []
         self.breakpoints = []
         self.instructions_ran = 0
+        self.key_queue = Queue(maxsize=100)
+        self.stepping_over = False
 
     def __getitem__(self, position):
         return self.memory[position]
