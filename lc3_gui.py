@@ -31,6 +31,14 @@ default_color = QtGui.QColor(240, 240, 240)
 
 key_queue = Queue(maxsize=100)
 
+# TODO list:
+# Settings:
+#   - Follow PC
+#   - Auto-add labels to special memory addresses
+#   - Character queue buffer size
+# Fix auto-labeler
+# Add safety measures for changing memory/registers
+
 class Window(QtGui.QMainWindow):
     def __init__(self):
         super(Window, self).__init__()
@@ -42,7 +50,6 @@ class Window(QtGui.QMainWindow):
         self.setupFileMenu()
         self.console = Console(self)
         self.console_thread = None
-        # self.speed_slider = SpeedSlider(self)
         self.worker = RunHandler(self)
         self.modified_data = []
         self.labeled_addresses = {}
@@ -225,7 +232,11 @@ class Window(QtGui.QMainWindow):
         self.mem_table.item(row, 0).setBackground(default_color)
 
         if not place:
-            index = self.mem_table.selectedIndexes()[0]
+            selected = self.mem_table.selectedIndexes()
+            if len(selected) == 0:
+                self.mem_table.item(row, 0).setBackground(pc_color)
+                return
+            index = selected[0]
             registers.PC = index.row()
             row = registers.PC & bit_mask
         else:
@@ -587,7 +598,7 @@ class MemoryTable(QTableWidget):
                 inst_bin = to_bin_string(inst)
 
                 self.setItem(address, 2, QTableWidgetItem(QString(inst_bin)))
-                set_info_column(address, inst)
+                self.set_info_column(address, inst)
                 memory[address] = inst  # Convert bit string at address to instruction
 
     def handle_double_click(self, cell):
@@ -683,19 +694,74 @@ class FileDialog(QtGui.QFileDialog):
 
 # Class for the search bar
 # TODO: add drop-down of recent searches
-class SearchBar(QtGui.QLineEdit):
+class SearchBar(QtGui.QWidget):
     def __init__(self, mem_table, *args):
-        QtGui.QLineEdit.__init__(self, *args)
+        QtGui.QWidget.__init__(self, *args)
+        grid = QtGui.QBoxLayout(QtGui.QBoxLayout.LeftToRight)
+        grid.setSpacing(2)
+        self.enter_line = QtGui.QLineEdit()
+        self.address_history = [default_origin]
+        self.place = 0
+
+        # TODO: implement this
+        # self.history_popup = QtGui.QToolButton(self)
+        # self.history_popup.setPopupMode(QtGui.QToolButton.MenuButtonPopup)
+        # self.history_buttons = QtGui.QPushButton('x3000', self)
+        # self.history_popup.setMenu(QtGui.QMenu(self.history_buttons))
+        # self.history_popup.setMaximumSize(20, 80)
+        # action = QtGui.QWidgetAction(self.history_popup)
+        # action.setDefaultWidget(self.textBox)
+        # self.history_popup.menu().addAction(action)
+
+        self.next_button = QtGui.QPushButton('>', self)
+        self.next_button.setMaximumSize(20, 40)
+        self.next_button.clicked.connect(self.next_address)
+
+        self.prev_button = QtGui.QPushButton('<', self)
+        self.prev_button.setMaximumSize(20, 40)
+        self.prev_button.clicked.connect(self.prev_address)
+
+        grid.addWidget(self.prev_button)
+        grid.addWidget(self.next_button)
+        grid.addWidget(self.enter_line)
         self.mem_table = mem_table
-        self.connect(self, SIGNAL("returnPressed()"), self.goto_line)
+        self.enter_line.returnPressed.connect(self.show_line)
+        self.setLayout(grid)
 
     # Submit the search result and hop to that line
-    def goto_line(self):
-        line = str(self.text())
+    def show_line(self):
+        line = str(self.enter_line.text())
         if line[0] == 'x':
             line = line[1:]
-        self.mem_table.verticalScrollBar().setValue(int(line, 16))
-        self.clear()
+        try:
+            row = int(line, 16)
+            self.mem_table.verticalScrollBar().setValue(row)
+            if len(self.address_history) <= self.place + 1:
+                self.address_history.append(row)
+            else:
+                self.address_history[self.place + 1] = row
+                self.address_history = self.address_history[0:self.place + 2]
+            self.place += 1
+        except ValueError:
+            pass  # Invalid input, just clear it and move on
+        self.enter_line.clear()
+
+    def next_address(self):
+        history = self.address_history
+        place = self.place
+        if len(history) != place + 1:
+            self.mem_table.verticalScrollBar().setValue(history[place + 1])
+            self.place += 1
+
+    def prev_address(self):
+        history = self.address_history
+        place = self.place
+        if place > 0:
+            self.mem_table.verticalScrollBar().setValue(history[place - 1])
+            self.place -= 1
+
+
+
 
 
 # Class for the row of buttons under the register table
