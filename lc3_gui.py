@@ -185,6 +185,7 @@ class Window(QtGui.QMainWindow):
     def reinitialize_machine(self, first_time=False):
         if not first_time:  # Initial time should not suspend process
             self.suspend_process()
+            memory.paused = False
         for i, register in enumerate(registers):
             registers[i] = 0
         self.set_pc(0x3000)
@@ -343,10 +344,11 @@ class RunHandler(QtCore.QObject):
     # Step through the code
     def step_app(self):
         row = registers.PC & bit_mask
-        if self.pc_out_of_view(self.main.mem_table, row):
-            self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
         self.main.mem_table.item(row, 0).setBackground(default_color)
         lc3_logic.step_instruction(self)
+
+        if self.pc_out_of_view(self.main.mem_table, registers.PC & bit_mask):
+            self.main.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)  # If we step, make sure to follow
 
         self.emit_done()
 
