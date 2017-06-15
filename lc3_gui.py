@@ -13,7 +13,7 @@ import instruction_parser as parser
 from storage import Registers
 from storage import *
 
-from queue import *
+from Queue import *
 
 KBSR = -512  # 0xFE00
 KBDR = -510  # 0xFE02

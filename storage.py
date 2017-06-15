@@ -1,6 +1,6 @@
 import numpy as np
 import binascii as ba
-from queue import *
+from Queue import *
 
 nrow = 65536
 
