@@ -305,7 +305,7 @@ class Console(QTextEdit):
     @staticmethod
     def send_key(event_txt):
         key = ord(str(event_txt))
-        memory.key_queue.put(key, 0.01)
+        memory.key_queue.put(key)
 
     @staticmethod
     def initiate_service_routine(main, vector):
