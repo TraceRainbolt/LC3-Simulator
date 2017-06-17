@@ -14,6 +14,7 @@ from storage import Registers
 from storage import *
 
 from Queue import *
+import re
 
 KBSR = -512  # 0xFE00
 KBDR = -510  # 0xFE02
@@ -374,7 +375,6 @@ class RunHandler(QtCore.QObject):
         self.finished.emit()
 
 
-
 # Class for the GUI element displaying the Register Table
 class RegisterTable(QTableWidget):
     def __init__(self, *args):
@@ -491,6 +491,7 @@ class MemoryTable(QTableWidget):
         header = self.horizontalHeader()
         header.setVisible(False)
         header.setResizeMode(2, QtGui.QHeaderView.Stretch)
+        header.setResizeMode(4, QtGui.QHeaderView.Stretch)
         self.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
         self.setMouseTracking(True)
         self.edited_location = None
@@ -548,6 +549,7 @@ class MemoryTable(QTableWidget):
         self.item(address, 1).setFlags(QtCore.Qt.ItemIsEnabled)
         self.setItem(address, 2, QTableWidgetItem(QString("0" * 16)))
         self.setItem(address, 3, QTableWidgetItem(QString("x0000")))
+        self.setItem(address, 4, QTableWidgetItem(QString("")))
         self.setItem(address, 5, QTableWidgetItem(QString("NOP")))
         self.item(address, 5).setFlags(QtCore.Qt.ItemIsEnabled)
 
@@ -633,8 +635,7 @@ class FileDialog(QtGui.QFileDialog):
 
         # TODO: fix
         for name in file_names:
-            pass
-            # self.check_symbol_table(name)
+            self.check_symbol_table(name)
 
         for name in file_names:
             interval = memory.load_instructions(name)
@@ -658,18 +659,13 @@ class FileDialog(QtGui.QFileDialog):
         base_name = name[:-4]
         try:
             with open(base_name + ".sym") as f:
-                for i, line in enumerate(f):
-                    if i > 1:
-                        label = ''
-                        for j, char in enumerate(line):
-                            if j > 2:
-                                if char == " ":
-                                    break
-                                label += char
-                        address = line[-5:-1]
+                for line in f:
+                    symbols = re.search('(?<=^...)(\w*).*([0-9a-fA-F]{4}).*$', line)  # Fancy regex for finding labels
+                    if symbols is not None:
+                        label = symbols.group(1)
+                        address = symbols.group(2)
                         self.main.mem_table.setItem(int(address, 16), 4, QTableWidgetItem(QString(label)))
                         self.labeled_addresses[int(address, 16)] = label
-
         except IOError:
             return  # It's fine, just no labels for them
 
@@ -741,9 +737,6 @@ class SearchBar(QtGui.QWidget):
         if place > 0:
             self.mem_table.verticalScrollBar().setValue(history[place - 1])
             self.place -= 1
-
-
-
 
 
 # Class for the row of buttons under the register table
