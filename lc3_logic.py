@@ -47,7 +47,7 @@ def create_UI():
 
 # Updates the register table to display to the UI
 def update_gui_registers(run_handler):
-    QtCore.QMetaObject.invokeMethod(run_handler, 'send_update_gui_tables', Qt.DirectConnection)
+    run_handler.gui_updated.emit()
 
 
 # Handles basics for running instructions
@@ -68,9 +68,7 @@ def run_instructions(run_handler):
         if memory.paused:
             break
     memory.paused = False
-    update_gui_registers(run_handler)
-    QtCore.QMetaObject.invokeMethod(run_handler, 'emit_done', Qt.DirectConnection)
-    
+    finish_processing(run_handler)
 
 # Same as run instruction, but once
 def step_instruction(run_handler):
@@ -94,13 +92,16 @@ def step_instruction(run_handler):
             break
         elif not memory.stepping_over:
             break
-    update_gui_registers(run_handler)
-    handle_update_gui_memory(run_handler, KBSR)
-    handle_update_gui_memory(run_handler, KBDR)
-    handle_update_gui_memory(run_handler, DDR)
-    handle_update_gui_memory(run_handler, DSR)
-    memory.stepping_over = False
-    QtCore.QMetaObject.invokeMethod(run_handler, 'emit_done', Qt.DirectConnection)
+    finish_processing(run_handler)
+
+def finish_processing(run_handler):
+    run_handler.gui_updated.emit()
+    run_handler.memory_updated.emit(KBSR)
+    run_handler.memory_updated.emit(KBDR)
+    run_handler.memory_updated.emit(DDR)
+    run_handler.memory_updated.emit(DSR)
+    run_handler.finished.emit()
+
 
 # Finds instruction and tells handle to execute it
 def handle_instruction(inst, console):
@@ -148,7 +149,7 @@ def handle_KBDR():
 
 # Handle checking the KBSR and the DDR
 # Including updating their memory and displaying characters on the console
-def handle_IO(console):
+def handle_IO(run_handler):
     if (memory[KBSR] >> 15) & 1 == 0 and not memory.key_queue.empty():
         memory[KBSR] = memory[KBSR] | 0x8000  # Reset KBSR
         key = memory.key_queue.get(0.1)
@@ -158,14 +159,12 @@ def handle_IO(console):
 
     if (memory[DSR] >> 15) & 1 == 0:
         if memory[DDR] in range(256):
-            QtCore.QMetaObject.invokeMethod(console, 'send_append_text', Qt.DirectConnection,
-                                            QtCore.Q_ARG(str, str(chr(memory[DDR]))))
+            run_handler.ddr_updated.emit(chr(memory[DDR]))
             memory[DSR] = memory[DSR] | 0x8000
 
 
-def handle_update_gui_memory(console, changed):
-    QtCore.QMetaObject.invokeMethod(console, 'send_update_gui_memory', Qt.DirectConnection,
-                                    QtCore.Q_ARG(int, changed))
+def handle_update_gui_memory(run_handler, changed):
+    run_handler.memory_updated.emit(changed)
 
 #
 # HANDLERS: THe following functions handle

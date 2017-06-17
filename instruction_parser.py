@@ -58,7 +58,7 @@ def parse_any(inst):
             return ['NOP']
         val = ret.pop(1)
         cc = '{:03b}'.format(val)
-        if val == 0:
+        if val == 0 and inst in range(256):
             ret = ['    ' + chr(inst) + '       #' + str(inst)]
             return ret
         for i, n in enumerate(cc):

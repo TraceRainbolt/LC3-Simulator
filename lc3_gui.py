@@ -155,31 +155,6 @@ class Window(QtGui.QMainWindow):
         executeMenu.addAction(stepAction)
         executeMenu.addAction(stopAction)
 
-    @QtCore.pyqtSlot(str)
-    def append_text(self, text):
-        """Append text to the QTextEdit."""
-        # Maybe QTextEdit.append() works as well, but this is how I do it:
-        cursor = self.console.textCursor()
-        cursor.movePosition(QtGui.QTextCursor.End)
-        cursor.insertText(text)
-        self.console.setTextCursor(cursor)
-        self.console.ensureCursorVisible()
-
-    # Slot for receiving register updates
-    @QtCore.pyqtSlot()
-    def update_gui_tables(self):
-        self.reg_table.setData()
-        KBDR_gui = KBDR & bit_mask
-        KBSR_gui = KBSR & bit_mask
-        self.mem_table.setDataRange(KBDR_gui, KBDR_gui + 1)
-        self.mem_table.setDataRange(KBSR_gui, KBSR_gui + 1)
-
-    # Slot for receiving memory updates
-    @QtCore.pyqtSlot(int)
-    def update_memory_table(self, changed):
-        if self.mem_table.item(changed, 0) is not None:
-            self.mem_table.setDataRange(changed, changed + 1)
-
     # Open the file dialog to select program to load
     def load_program(self):
         self.file_dialog.file_open(self)
@@ -220,6 +195,17 @@ class Window(QtGui.QMainWindow):
     def exit_app():
         sys.exit(0)
 
+    @QtCore.pyqtSlot()
+    def update_gui_tables(self):
+        self.reg_table.setData()
+        KBDR_gui = KBDR & bit_mask
+        KBSR_gui = KBSR & bit_mask
+        self.mem_table.setDataRange(KBDR_gui, KBDR_gui + 1)
+        self.mem_table.setDataRange(KBSR_gui, KBSR_gui + 1)
+
+        row = registers.PC & bit_mask
+        self.mem_table.item(row, 0).setBackground(pc_color)
+
     # Used for stopping in the middle of an execution, activated by the STOP button
     def suspend_process(self):
         self.mem_table.verticalScrollBar().setValue(registers.PC & bit_mask)
@@ -259,14 +245,13 @@ class Window(QtGui.QMainWindow):
     # Also starts up thread and makes all proper connections
     def run(self, step):
         memory[MCR] = 0xFFFF
-        self.console_thread = self.thread
         self.worker = RunHandler(self)
 
         self.worker.moveToThread(self.thread)
         self.worker.finished.connect(self.thread.quit)
-        self.worker.update_regs.connect(self.update_gui_tables)
-        self.worker.update_memory.connect(self.update_memory_table)
-        self.worker.updated.connect(self.append_text)
+        self.worker.ddr_updated.connect(self.console.output_char, Qt.BlockingQueuedConnection)
+        self.worker.gui_updated.connect(self.update_gui_tables, Qt.BlockingQueuedConnection)
+        self.worker.memory_updated.connect(self.mem_table.update_memory_table, Qt.BlockingQueuedConnection)
 
         if step == 'run':
             self.thread.started.connect(self.worker.run_app)
@@ -278,7 +263,6 @@ class Window(QtGui.QMainWindow):
 
         self.thread.finished.connect(self.thread.quit)
         self.thread.start()
-
 
 # Class for the console that the machine prints to
 class Console(QTextEdit):
@@ -301,6 +285,14 @@ class Console(QTextEdit):
             self.send_key(event.text())
             if (memory[KBSR] >> 14) & 1 == 1:
                 self.initiate_service_routine(self.main, 0x80)
+
+    @QtCore.pyqtSlot(str)
+    def output_char(self, char):
+        cursor = self.textCursor()
+        cursor.movePosition(QtGui.QTextCursor.End)
+        cursor.insertText(char)
+        self.setTextCursor(cursor)
+        self.ensureCursorVisible()
 
     @staticmethod
     def send_key(event_txt):
@@ -333,11 +325,11 @@ class RunHandler(QtCore.QObject):
     #
     # Below are all signals associated with this worker
     #
-    finished = QtCore.pyqtSignal()  # Used when done
-    updated = QtCore.pyqtSignal(str)  # Used when console is updated
-    update_regs = QtCore.pyqtSignal()  # Used when registers are updated
+    gui_updated = QtCore.pyqtSignal()  # Used when registers are updated
+    memory_updated = QtCore.pyqtSignal(int)  # Used to update memory gui
+    ddr_updated = QtCore.pyqtSignal(str)  # Used to update output gui
     started = QtCore.pyqtSignal()  # Used when started
-    update_memory = QtCore.pyqtSignal(int)  # Used to update memory gui
+    finished = QtCore.pyqtSignal()  # Used when done
 
     def __init__(self, main, ):
         super(QtCore.QObject, self).__init__()
@@ -381,21 +373,6 @@ class RunHandler(QtCore.QObject):
     def emit_done(self):
         self.finished.emit()
 
-    # Slot for updating the Register/Memory tables
-    @QtCore.pyqtSlot()
-    def send_update_gui_tables(self):
-        self.update_regs.emit()
-        row = registers.PC & bit_mask
-        self.main.mem_table.item(row, 0).setBackground(pc_color)
-
-    # Slot for sending output to console
-    @QtCore.pyqtSlot(str)
-    def send_append_text(self, char):
-        self.updated.emit(char)
-
-    @QtCore.pyqtSlot(int)
-    def send_update_gui_memory(self, changed):
-        self.update_memory.emit(changed)
 
 
 # Class for the GUI element displaying the Register Table
@@ -577,6 +554,11 @@ class MemoryTable(QTableWidget):
     def set_edited_location(self):
         if self.selectedIndexes():
             self.edited_location = self.selectedIndexes()[0]
+
+    @QtCore.pyqtSlot(int)
+    def update_memory_table(self, changed):
+        if self.item(changed, 0) is not None:
+            self.setDataRange(changed, changed + 1)
 
     def update_internal_memory(self):
         if self.edited_location is not None:
