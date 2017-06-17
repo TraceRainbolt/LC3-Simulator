@@ -28,7 +28,6 @@ jump_ops = ['JSR', 'TRAP']
 # TODO: let the user submit their own OS file
 os_file_name = "LC3_OS.bin"
 
-
 # Main function, initializes memory and starts running instructions
 def main():
     memory.load_os()
@@ -77,7 +76,7 @@ def step_instruction(run_handler):
     if memory.stepping_over and parser.parse_op(pre_inst >> 12) in jump_ops:
         jumping = True
     while True:
-        if (memory[MCR] >> 15) & 0b1 == 1:
+        if memory[MCR] & 0x8000 != 0:
             registers.PC += 1
             inst = memory[registers.PC - 1]
             registers.IR = inst
@@ -106,38 +105,7 @@ def finish_processing(run_handler):
 # Finds instruction and tells handle to execute it
 def handle_instruction(inst, console):
     opcode = inst >> 12
-    str_op = parser.parse_op(opcode)
-    if str_op == 'ADD':
-        handle_add(inst)
-    elif str_op == 'NOT':
-        handle_not(inst)
-    elif str_op == 'AND':
-        handle_and(inst)
-    elif str_op == 'LD':
-        handle_ld(inst, console)
-    elif str_op == 'LDI':
-        handle_ldi(inst, console)
-    elif str_op == 'LDR':
-        handle_ldr(inst, console)
-    elif str_op == 'LEA':
-        handle_lea(inst)
-    elif str_op == 'ST':
-        handle_st(inst, console)
-    elif str_op == 'STI':
-        handle_sti(inst, console)
-    elif str_op == 'STR':
-        handle_str(inst, console)
-    elif str_op == 'BR':
-        handle_br(inst)
-    elif str_op == 'JSR':
-        handle_jsr(inst)
-    elif str_op == 'RET':
-        handle_ret(inst)
-    elif str_op == 'RTI':
-        handle_rti(inst)
-    elif str_op == 'TRAP':
-        handle_trap(inst)
-
+    handlers[opcode](inst, console)
 
 # Handle the Display Data Register, called when updated
 def handle_DDR():
@@ -150,14 +118,14 @@ def handle_KBDR():
 # Handle checking the KBSR and the DDR
 # Including updating their memory and displaying characters on the console
 def handle_IO(run_handler):
-    if (memory[KBSR] >> 15) & 1 == 0 and not memory.key_queue.empty():
+    if memory[KBSR] & 0x8000 == 0 and not memory.key_queue.empty():
         memory[KBSR] = memory[KBSR] | 0x8000  # Reset KBSR
-        key = memory.key_queue.get(0.1)
+        key = memory.key_queue.get()
         if key == 0x0D:
             key = 0x0A
         memory[KBDR] = key  # Put key in KBDR
 
-    if (memory[DSR] >> 15) & 1 == 0:
+    if memory[DSR] & 0x8000 == 0:
         if memory[DDR] in range(256):
             run_handler.ddr_updated.emit(chr(memory[DDR]))
             memory[DSR] = memory[DSR] | 0x8000
@@ -170,7 +138,7 @@ def handle_update_gui_memory(run_handler, changed):
 # HANDLERS: THe following functions handle
 # their respective instructions
 #
-def handle_add(inst):
+def handle_add(inst, console):
     inst_list = parser.parse_add(inst)
     # Check for imm
     if inst_list[3] == 0:
@@ -186,7 +154,7 @@ def handle_add(inst):
     registers.set_CC(value)
 
 
-def handle_not(inst):
+def handle_not(inst, console):
     inst_list = parser.parse_not(inst)
     DR = inst_list[1]
     SR = registers[inst_list[2]]
@@ -195,7 +163,7 @@ def handle_not(inst):
     registers.set_CC(value)
 
 
-def handle_and(inst):
+def handle_and(inst, console):
     inst_list = parser.parse_add(inst)
     # Check for imm
     if inst_list[3] == 0:
@@ -245,7 +213,7 @@ def handle_ldr(inst, console):
     registers.set_CC(value)
 
 
-def handle_lea(inst):
+def handle_lea(inst, console):
     inst_list = parser.parse_lea(inst)
     DR = inst_list[1]
     address = registers.PC + sign_extend(inst_list[2], 9)
@@ -291,7 +259,7 @@ def handle_str(inst, console):
     handle_update_gui_memory(console, changed)
 
 
-def handle_br(inst):
+def handle_br(inst, console):
     inst_list = parser.parse_br(inst)
     condition = '{:03b}'.format(inst_list[1])
     cc = '{:03b}'.format(registers.CC)
@@ -301,7 +269,7 @@ def handle_br(inst):
             registers.PC = address
 
 
-def handle_jsr(inst):
+def handle_jsr(inst, console):
     inst_list = parser.parse_jsr(inst)
     if inst_list[1] == 1:  # JSR
         address = registers.PC + sign_extend(inst_list[2], 11)
@@ -312,13 +280,13 @@ def handle_jsr(inst):
     registers.PC = address
 
 
-def handle_ret(inst):
+def handle_ret(inst, console):
     inst_list = parser.parse_ret(inst)
     BaseR = inst_list[1]
     registers.PC = registers.registers[BaseR]
 
 
-def handle_rti(inst):
+def handle_rti(inst, console):
     if registers.PSR >> 15 == 0:
         registers.PC = memory[registers.registers[6]]
         registers.registers[6] += 1
@@ -329,7 +297,7 @@ def handle_rti(inst):
     else:
         print "Privilege mode exception."
 
-def handle_trap(inst):
+def handle_trap(inst, console):
     global ON
     registers.registers[7] = registers.PC
     trap = parser.parse_trap(inst)[1]
@@ -356,3 +324,21 @@ def to_bin_string(val):
 
 if __name__ == '__main__':
     main()
+
+# Must be defined below functions, just an array of possible instruction handlers
+handlers = [handle_br,
+            handle_add,
+            handle_ld,
+            handle_st,
+            handle_jsr,
+            handle_and,
+            handle_ldr,
+            handle_str,
+            handle_rti,
+            handle_not,
+            handle_ldi,
+            handle_sti,
+            handle_ret,
+            None,
+            handle_lea,
+            handle_trap]
